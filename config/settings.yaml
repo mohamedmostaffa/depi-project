@@ -1,0 +1,40 @@
+# BrandMind Global System Settings
+app_name: "BrandMind"
+version: "0.1.0"
+environment: "development"
+
+# LLM Configuration
+llm:
+  provider: "google"
+  model: "gemini-2.5-flash"
+  temperature_extract: 0.0
+  temperature_generate: 0.3
+  max_output_tokens: 1024
+  retry_attempts: 3
+  backoff_factor: 2.0
+
+# Retrieval & Vector Database
+retrieval:
+  embedding_model: "paraphrase-multilingual-MiniLM-L12-v2"
+  chroma_db_dir: "./chroma_db"
+  similarity_threshold: 0.65
+  top_k: 4
+  distance_metric: "cosine"
+
+# Session & Memory
+memory:
+  window_size: 8
+  track_entities: true
+
+# API & Server
+server:
+  host: "127.0.0.1"
+  port: 8000
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8501"
+
+# Logging & Auditing
+logging:
+  level: "INFO"
+  audit_file: "./results/audit_trace.jsonl"
