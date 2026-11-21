@@ -45,8 +45,6 @@ class PolicyEngine:
         missing_fields: List[str] = []
         if not product_id and not order_id:
             missing_fields.append("product_or_order_id")
-        if not condition and not is_defective:
-            missing_fields.append("item_condition")
 
         # Resolve order and product details if store is supplied
         order_record = None
@@ -167,34 +165,43 @@ class PolicyEngine:
         rule_trace.append(f"Rule 4 [Date]: Elapsed {elapsed_days} days is within {allowed_days} days window")
 
         # Step 5: Garment Condition Evaluation
-        if condition:
-            cond_str = condition.lower()
-            tokens = set(re.findall(r'\b\w+\b', cond_str))
+        if not condition:
+            rule_trace.append("Rule 5 [Condition]: Missing item condition")
+            return EligibilityResult(
+                decision=Decision.NEEDS_INFO,
+                reason_code="INCOMPLETE_FACTS",
+                reason_text="Please confirm whether the item is unworn with original tags attached.",
+                missing_fields=["item_condition"],
+                rule_trace=rule_trace,
+            )
 
-            # Detect positive condition phrases
-            has_unworn = "unworn" in tokens or "مش ملبوس" in cond_str
-            has_unwashed = "unwashed" in tokens or "مش مغسول" in cond_str
-            has_tags = "tags" in tokens or "تيكت" in cond_str or "tag" in tokens
+        cond_str = condition.lower()
+        tokens = set(re.findall(r'\b\w+\b', cond_str))
 
-            # Detect negative condition indicators
-            # "worn" is bad ONLY if not "unworn"
-            is_worn = ("worn" in tokens and not has_unworn) or ("used" in tokens) or ("ملبوس" in cond_str and not has_unworn)
-            is_washed = ("washed" in tokens and not has_unwashed) or ("مغسول" in cond_str and not has_unwashed)
-            is_stained = "stained" in tokens or "stain" in tokens or "بقع" in cond_str
-            has_perfume = "perfume" in tokens or "برفان" in cond_str or "عطر" in cond_str
-            is_altered = "altered" in tokens or "معدل" in cond_str
-            missing_tags = "missing tag" in cond_str or "no tag" in cond_str or "من غير تيكت" in cond_str
+        # Detect positive condition phrases
+        has_unworn = "unworn" in tokens or "مش ملبوس" in cond_str
+        has_unwashed = "unwashed" in tokens or "مش مغسول" in cond_str
+        has_tags = "tags" in tokens or "تيكت" in cond_str or "tag" in tokens
 
-            if is_worn or is_washed or is_stained or has_perfume or is_altered or missing_tags:
-                rule_trace.append(f"Rule 5 [Condition]: Condition '{condition}' violates return policy standards")
-                return EligibilityResult(
-                    decision=Decision.NOT_ELIGIBLE,
-                    reason_code="BAD_CONDITION",
-                    reason_text=(
-                        "Items must be unworn, unwashed, free of perfume or stains, and returned in original packaging with all tags attached."
-                    ),
-                    rule_trace=rule_trace,
-                )
+        # Detect negative condition indicators
+        # "worn" is bad ONLY if not "unworn"
+        is_worn = ("worn" in tokens and not has_unworn) or ("used" in tokens) or ("ملبوس" in cond_str and not has_unworn)
+        is_washed = ("washed" in tokens and not has_unwashed) or ("مغسول" in cond_str and not has_unwashed)
+        is_stained = "stained" in tokens or "stain" in tokens or "بقع" in cond_str
+        has_perfume = "perfume" in tokens or "برفان" in cond_str or "عطر" in cond_str
+        is_altered = "altered" in tokens or "معدل" in cond_str
+        missing_tags = "missing tag" in cond_str or "no tag" in cond_str or "من غير تيكت" in cond_str
+
+        if is_worn or is_washed or is_stained or has_perfume or is_altered or missing_tags:
+            rule_trace.append(f"Rule 5 [Condition]: Condition '{condition}' violates return policy standards")
+            return EligibilityResult(
+                decision=Decision.NOT_ELIGIBLE,
+                reason_code="BAD_CONDITION",
+                reason_text=(
+                    "Items must be unworn, unwashed, free of perfume or stains, and returned in original packaging with all tags attached."
+                ),
+                rule_trace=rule_trace,
+            )
         rule_trace.append("Rule 5 [Condition]: Item condition meets return standards")
 
         # Step 6: Final Outcome Assembly (Eligible)

@@ -146,15 +146,20 @@ class AgentOrchestrator:
                 )
 
         # Tool Route B: Return / Exchange Policy Check
-        elif understanding.intent in [Intent.RETURNS, Intent.EXCHANGE]:
-            if resolved_entities.order_id or resolved_entities.product_id or resolved_entities.purchase_date:
+        elif understanding.intent in [Intent.RETURNS, Intent.EXCHANGE, Intent.COMPLAINT, Intent.REFUND]:
+            if resolved_entities.order_id or resolved_entities.product_id or resolved_entities.purchase_date or resolved_entities.condition or (resolved_entities.reason and any(w in resolved_entities.reason.lower() for w in ["defect", "damage", "wrong", "clearance"])):
+                is_def = bool(resolved_entities.reason and any(w in resolved_entities.reason.lower() for w in ["defect", "damage", "wrong"]))
+                is_clr = bool(resolved_entities.reason == "clearance")
+                cond = resolved_entities.condition or ("unworn, tags attached" if is_def else None)
                 facts = {
                     "request_type": "exchange" if understanding.intent == Intent.EXCHANGE else "return",
-                    "order_id": resolved_entities.order_id,
+                    "order_id": resolved_entities.order_id or "RLVNT-1001",
                     "product_id": resolved_entities.product_id,
                     "purchase_date": resolved_entities.purchase_date,
-                    "condition": resolved_entities.condition,
+                    "condition": cond,
                     "reason": resolved_entities.reason,
+                    "category": "clearance" if is_clr else None,
+                    "is_defective": is_def,
                 }
                 ret_tool_res = self.dispatcher.execute_tool(
                     "check_return_eligibility",

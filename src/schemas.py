@@ -31,6 +31,7 @@ class Intent(str, Enum):
     RETURNS = "returns"
     EXCHANGE = "exchange"
     REFUND = "refund"
+    PAYMENT = "payment"
     PRODUCT_INFO = "product_info"
     AVAILABILITY = "availability"
     ORDER_STATUS = "order_status"

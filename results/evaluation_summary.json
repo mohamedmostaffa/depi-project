@@ -1,0 +1,114 @@
+{
+  "total_scenarios": 75,
+  "configurations": {
+    "config_a_direct_llm": {
+      "name": "Config A: Direct LLM Baseline",
+      "retrieval": {
+        "hit@4": 0.0,
+        "mrr@4": 0.0,
+        "precision@4": 0.0,
+        "evaluated_queries": 48
+      },
+      "hallucination": {
+        "hallucination_rate": 0.28,
+        "hallucinated_count": 21,
+        "total_queries": 75
+      },
+      "policy_accuracy": {
+        "accuracy": 0.0,
+        "correct": 0,
+        "total_evaluated": 15
+      },
+      "tool_accuracy": {
+        "accuracy": 0.56,
+        "correct": 42,
+        "total_evaluated": 75
+      },
+      "escalation_recall": {
+        "recall": 0.0,
+        "precision": 1.0,
+        "escalated_count": 0,
+        "total_mandatory": 10
+      },
+      "latency": {
+        "mean_ms": 0.02,
+        "p50_ms": 0.02,
+        "p95_ms": 0.02
+      }
+    },
+    "config_b_rag_only": {
+      "name": "Config B: RAG-Only Baseline",
+      "retrieval": {
+        "hit@4": 0.625,
+        "mrr@4": 0.4566,
+        "precision@4": 0.1562,
+        "evaluated_queries": 48
+      },
+      "hallucination": {
+        "hallucination_rate": 0.0,
+        "hallucinated_count": 0,
+        "total_queries": 75
+      },
+      "policy_accuracy": {
+        "accuracy": 0.2,
+        "correct": 3,
+        "total_evaluated": 15
+      },
+      "tool_accuracy": {
+        "accuracy": 0.56,
+        "correct": 42,
+        "total_evaluated": 75
+      },
+      "escalation_recall": {
+        "recall": 0.0,
+        "precision": 1.0,
+        "escalated_count": 0,
+        "total_mandatory": 10
+      },
+      "latency": {
+        "mean_ms": 593.11,
+        "p50_ms": 26.02,
+        "p95_ms": 35.08
+      }
+    },
+    "config_c_brandmind_full": {
+      "name": "Config C: Full BrandMind System",
+      "retrieval": {
+        "hit@4": 0.7917,
+        "mrr@4": 0.5347,
+        "precision@4": 0.1979,
+        "evaluated_queries": 48
+      },
+      "hallucination": {
+        "hallucination_rate": 0.0,
+        "hallucinated_count": 0,
+        "total_queries": 75
+      },
+      "policy_accuracy": {
+        "accuracy": 1.0,
+        "correct": 15,
+        "total_evaluated": 15
+      },
+      "tool_accuracy": {
+        "accuracy": 0.8933,
+        "correct": 67,
+        "total_evaluated": 75
+      },
+      "escalation_recall": {
+        "recall": 1.0,
+        "precision": 0.8333,
+        "escalated_count": 10,
+        "total_mandatory": 10
+      },
+      "intent_metrics": {
+        "accuracy": 0.8533,
+        "macro_f1": 0.8406
+      },
+      "latency": {
+        "mean_ms": 30.7,
+        "p50_ms": 32.5,
+        "p95_ms": 41.31
+      }
+    }
+  }
+}

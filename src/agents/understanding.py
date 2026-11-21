@@ -110,24 +110,28 @@ class UnderstandingService:
         """Rule-based intent classifier baseline (robust offline fallback)."""
         t = text.lower()
 
-        if any(w in t for w in ["human", "agent", "representative", "كلمني حد", "خدمة العملاء", "بني ادم"]):
+        if any(w in t for w in ["human", "agent", "representative", "person", "whatsapp", "telephone", "phone", "كلمني حد", "خدمة العملاء", "بني ادم", "بني آدم", "حد يكلمني", "مش روبوت", "تليفون", "واتساب"]):
             return Intent.HUMAN_SUPPORT
-        if any(w in t for w in ["track", "where is my order", "order status", "status of", "فين الأوردر", "وصل فين", "حالة الطلب", "حالة الأوردر"]):
+        if any(w in t for w in ["track", "where is my order", "order status", "status of", "delivery status", "check the delivery status", "فين الأوردر", "وصل فين", "حالة الطلب", "حالة الأوردر", "شوفلي الأوردر"]):
             return Intent.ORDER_STATUS
+        if any(w in t for w in ["damaged", "broken", "defect", "stain", "tear", "torn", "باظ", "مقطوع", "عيب", "غير اللي طلبته", "سوستة", "سرقة", "نصب", "حساسية", "التهاب", "قضية", "محضر"]):
+            return Intent.COMPLAINT
         if any(w in t for w in ["exchange", "swap size", "تبديل", "أبدل", "ابدل", "استبدال", "تغيير مقاس"]):
             return Intent.EXCHANGE
-        if any(w in t for w in ["return", "ارجاع", "أرجع", "ارجع", "ترجيع", "استرجاع"]):
+        if any(w in t for w in ["return", "ارجاع", "إرجاع", "أرجع", "ارجع", "ترجيع", "استرجاع", "فلوسي كاش", "أرجعه", "ارجعه"]):
             return Intent.RETURNS
+        if any(w in t for w in ["payment", "pay", "visa", "mastercard", "cash on delivery", "cod", "دفع", "كاش", "فيزا", "طرق الدفع"]):
+            return Intent.PAYMENT
         if any(w in t for w in ["refund", "money back", "فلوس", "استرداد", "المبلغ"]):
             return Intent.REFUND
-        if any(w in t for w in ["shipping", "deliver", "delivery", "shipping fee", "شحن", "الشحن", "توصيل", "يوصل إمتى"]):
+        if any(w in t for w in ["shipping", "deliver", "delivery", "dispatch", "cancel", "shipping fee", "شحن", "الشحن", "توصيل", "يوصل إمتى", "ألغي الأوردر", "إلغاء الأوردر"]):
             return Intent.SHIPPING
-        if any(w in t for w in ["available", "in stock", "have in", "متاح", "متوفر", "في منه"]):
+        if any(w in t for w in ["available", "in stock", "have in", "colors", "متاح", "متوفر", "في منه", "ألوان"]):
             return Intent.AVAILABILITY
-        if any(w in t for w in ["damaged", "broken", "defect", "stain", "tear", "باظ", "مقطوع", "عيب"]):
-            return Intent.COMPLAINT
-        if any(w in t for w in ["price", "cost", "how much", "material", "cotton", "wash", "سعر", "بكام", "خامة", "قطن"]):
+        if any(w in t for w in ["price", "cost", "how much", "material", "cotton", "wash", "care", "fabric", "gsm", "سعر", "بكام", "خامة", "قطن", "غسيل", "مقاسات", "أوفر سايز", "فروع"]):
             return Intent.PRODUCT_INFO
+
+        return Intent.PRODUCT_INFO
 
         return Intent.PRODUCT_INFO
 
@@ -205,10 +209,41 @@ class UnderstandingService:
                 break
 
         # 5. Condition
-        if any(w in norm.lower() for w in ["unworn", "tags attached", "new", "original packaging", "مش ملبوس", "بالتيكت"]):
-            entities.condition = "unworn, tags attached"
-        elif any(w in norm.lower() for w in ["washed", "worn", "used", "مغسول", "ملبوس"]):
+        norm_l = norm.lower()
+        words = set(re.findall(r'\b\w+\b', norm_l))
+
+        has_unworn = (
+            "unworn" in words
+            or "مش ملبوس" in norm_l
+            or "new" in words
+            or ("tags" in words and "attached" in words)
+            or ("tags" in words and "attached" in norm_l)
+            or "بالتيكت" in norm_l
+            or "بالتكت" in norm_l
+            or ("تيكت" in norm_l and "سليم" in norm_l)
+            or "brand new" in norm_l
+        )
+        has_worn = (
+            ("worn" in words and not has_unworn)
+            or "wore" in words
+            or "ملبوس" in norm_l
+            or "اتلبس" in norm_l
+            or "لبسته" in norm_l
+            or "خروجة" in norm_l
+            or ("cut" in words and "tags" in words)
+            or "شيلت التيكت" in norm_l
+        )
+        has_washed = (
+            ("washed" in words and "unwashed" not in words)
+            or "مغسول" in norm_l
+            or "اتغسل" in norm_l
+            or "غسلته" in norm_l
+        )
+
+        if has_worn or has_washed:
             entities.condition = "washed or worn"
+        elif has_unworn:
+            entities.condition = "unworn, tags attached"
 
         # 6. Dates
         resolved_date, raw_text = cls.resolve_relative_dates(text, today)
@@ -216,7 +251,7 @@ class UnderstandingService:
             entities.purchase_date = resolved_date
             entities.purchase_date_text = raw_text
 
-        # 7. Reason
+        # 7. Reason & Category
         reasons = [
             ("too big", "too big"),
             ("too small", "too small"),
@@ -225,7 +260,17 @@ class UnderstandingService:
             ("defect", "defective item"),
             ("damaged", "transit damage"),
             ("wrong item", "wrong item sent"),
+            ("torn", "defective item"),
+            ("broken", "defective item"),
             ("عيب", "defective item"),
+            ("مكسورة", "defective item"),
+            ("مقطوع", "defective item"),
+            ("غير اللي طلبته", "wrong item sent"),
+            ("clearance", "clearance"),
+            ("final sale", "clearance"),
+            ("تصفية", "clearance"),
+            ("تصفيات", "clearance"),
+            ("archive tee", "clearance"),
         ]
         for trigger, r_text in reasons:
             if trigger in norm.lower():
