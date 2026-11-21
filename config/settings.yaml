@@ -17,7 +17,7 @@ llm:
 retrieval:
   embedding_model: "paraphrase-multilingual-MiniLM-L12-v2"
   chroma_db_dir: "./chroma_db"
-  similarity_threshold: 0.65
+  similarity_threshold: 0.30
   top_k: 4
   distance_metric: "cosine"
 

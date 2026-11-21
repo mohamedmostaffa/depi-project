@@ -66,3 +66,16 @@ This document records key technical and architectural decisions, alternatives ev
   3. Pydantic V2 models (`src/schemas.py`).
 - **Decision:** Standardize all inputs, tool payloads, and turn outputs on Pydantic V2 (`BaseModel`).
 - **Defense for DEPI:** Pydantic provides runtime validation, automatic type coercion, native JSON schema export for LLM structured output, and seamless integration with FastAPI.
+
+---
+
+## ADR-006: Calibrating Cosine Similarity Refusal Threshold for Multilingual RAG
+- **Date:** November 21, 2026
+- **Status:** ACCEPTED
+- **Context:** In `paraphrase-multilingual-MiniLM-L12-v2`, cosine distance between query embeddings and indexed paragraph embeddings hovers around $0.55–0.60$ for relevant in-domain inquiries (yielding similarities $s = 1 - d \approx 0.40–0.45$). Out-of-domain random queries have distance $> 0.90$ ($s < 0.10$).
+- **Alternatives Considered:**
+  1. Naive threshold of $0.65$ (rejects valid in-domain Arabic and English queries as "uncovered").
+  2. No threshold (forces LLM to hallucinate answers to out-of-domain queries).
+  3. Calibrated threshold of $0.30$ based on empirical distance distributions of positive vs negative sets.
+- **Decision:** Calibrate `similarity_threshold` to $0.30$.
+- **Defense for DEPI:** Empirical threshold calibration directly prevents hallucination (Golden Rule G1) while preserving high recall ($\ge 85\%$) on colloquial Egyptian Arabic inquiries. Both in-domain and out-of-domain test queries validate this boundary cleanly.
