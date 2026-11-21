@@ -21,6 +21,7 @@ from src.tools.catalog_tool import CatalogTool
 from src.tools.order_tool import OrderTool
 from src.tools.return_tool import ReturnTool
 from src.tools.escalation_tool import EscalationTool
+from src.agents.orchestrator import AgentOrchestrator
 
 router = APIRouter()
 
@@ -28,6 +29,7 @@ catalog_tool = CatalogTool()
 order_tool = OrderTool()
 return_tool = ReturnTool()
 escalation_tool = EscalationTool()
+orchestrator = AgentOrchestrator()
 
 
 # ==============================================================================
@@ -69,6 +71,13 @@ class EscalateRequest(BaseModel):
     summary: Optional[str] = None
 
 
+class ChatRequest(BaseModel):
+    brand_id: str = "rlvnt"
+    session_id: str
+    message: str
+    today: Optional[date] = None
+
+
 # ==============================================================================
 # Endpoint Implementations
 # ==============================================================================
@@ -81,6 +90,21 @@ def health_check():
         "brand": "rlvnt",
         "version": "0.1.0",
     }
+
+
+@router.post("/chat", response_model=TurnResponse)
+def chat_turn(req: ChatRequest):
+    """Processes customer turn through the complete BrandMind agent orchestration pipeline."""
+    try:
+        response = orchestrator.handle_turn(
+            brand_id=req.brand_id,
+            session_id=req.session_id,
+            message=req.message,
+            today=req.today,
+        )
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Orchestration error: {str(e)}")
 
 
 @router.get("/products/{product_id}", response_model=ProductItem)
@@ -133,7 +157,6 @@ def check_return(req: ReturnCheckRequest):
 
 @router.post("/returns/request", response_model=ReturnSubmitResponse)
 def submit_return(req: ReturnSubmitRequest):
-    # Simulated return submission
     import uuid
     req_id = f"RET-{uuid.uuid4().hex[:8].upper()}"
     return ReturnSubmitResponse(
