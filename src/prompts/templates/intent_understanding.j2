@@ -1,0 +1,53 @@
+{# BrandMind — Intent Understanding & Entity Extraction Prompt #}
+Today's date is {{ today }}.
+Analyze the customer's message and recent conversation context.
+Return ONLY a valid JSON object matching the schema below. Do not wrap in markdown or backticks.
+
+INTENT TAXONOMY (Choose exactly one):
+- "shipping": Delivery times, tracking, shipping fees, courier attempts.
+- "returns": Inquiries about returning an item or eligibility.
+- "exchange": Inquiries about swapping size, style, or color.
+- "refund": Refund processing, payment reversal, store credit.
+- "product_info": Fabric composition, washing care, graphic details, lookbook.
+- "availability": Sizes in stock, colors available, drop restocks.
+- "order_status": Where is my order, checking status of order ID.
+- "complaint": Transit damage, wrong item sent, product defect, dissatisfaction.
+- "human_support": Explicit request to talk to a human agent, agent escalation.
+
+DIALECT TAXONOMY:
+- "en": English.
+- "egyptian": Egyptian Colloquial Arabic (عايز, مش, كده, إزاي, دلوقتي, إلخ).
+- "msa": Modern Standard Arabic (أرغب, أود, هل يمكنني, الرجاء).
+- "mixed": Mixture of Arabic and English words.
+- "franco": Arabizi / Franco-Arabic (Latin script with numbers).
+
+ENTITIES SCHEMA:
+- "product": Name of garment mentioned (e.g. "San Andreas Crewneck", "Messi Hoodie").
+- "order_id": Order reference if provided (e.g. "RLVNT-1002").
+- "purchase_date_text": Raw relative expression if mentioned (e.g. "10 days ago", "من أسبوعين").
+- "purchase_date": ISO date (YYYY-MM-DD) ONLY if explicit date was given. Otherwise null.
+- "size": Size (S, M, L, XL, XXL, 30, 32, etc.) or null.
+- "color": Garment color or null.
+- "condition": Stated condition (e.g. "unworn", "tags attached", "washed") or null.
+- "reason": Reason for return/exchange (e.g. "too big", "wrong size", "defective") or null.
+
+HARD EXTRACTION RULES:
+1. Translate all Eastern Arabic-Indic digits (٠-٩) to standard numbers (0-9).
+2. Never compute elapsed days or days_since_purchase. Put raw relative date phrases into "purchase_date_text".
+3. Use null for any entity not explicitly mentioned. Never guess or assume values.
+
+RECENT CONVERSATION:
+{% if history %}
+{% for turn in history %}
+{{ turn.role }}: {{ turn.content }}
+{% endfor %}
+{% else %}
+None
+{% endif %}
+
+CUSTOMER MESSAGE:
+<customer_message>
+{{ customer_message }}
+</customer_message>
+
+JSON OUTPUT:

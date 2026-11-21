@@ -1,0 +1,15 @@
+{# BrandMind — Human Escalation Message Template #}
+{% include "system_base.j2" %}
+
+ESCALATION REASON:
+{{ escalation_reason }}
+
+CUSTOMER MESSAGE:
+<customer_message>
+{{ customer_message }}
+</customer_message>
+
+INSTRUCTIONS:
+Craft a short, empathetic, professional hand-off message explaining that a human support team member is taking over this case.
+Mirror the customer's language (Egyptian Arabic if Arabic, English if English).
+Do not make financial promises or guess outcomes. Keep it to 1-2 reassuring sentences.
