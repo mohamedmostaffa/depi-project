@@ -215,9 +215,9 @@ class UnderstandingService:
         has_unworn = (
             "unworn" in words
             or "مش ملبوس" in norm_l
+            or "مش مغسول" in norm_l
             or "new" in words
             or ("tags" in words and "attached" in words)
-            or ("tags" in words and "attached" in norm_l)
             or "بالتيكت" in norm_l
             or "بالتكت" in norm_l
             or ("تيكت" in norm_l and "سليم" in norm_l)
@@ -225,8 +225,8 @@ class UnderstandingService:
         )
         has_worn = (
             ("worn" in words and not has_unworn)
-            or "wore" in words
-            or "ملبوس" in norm_l
+            or ("wore" in words and not has_unworn)
+            or ("ملبوس" in norm_l and "مش ملبوس" not in norm_l)
             or "اتلبس" in norm_l
             or "لبسته" in norm_l
             or "خروجة" in norm_l
@@ -235,7 +235,7 @@ class UnderstandingService:
         )
         has_washed = (
             ("washed" in words and "unwashed" not in words)
-            or "مغسول" in norm_l
+            or ("مغسول" in norm_l and "مش مغسول" not in norm_l)
             or "اتغسل" in norm_l
             or "غسلته" in norm_l
         )
