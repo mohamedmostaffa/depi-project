@@ -57,5 +57,7 @@ py -m pytest --cov=src tests/ --cov-report=term-missing
 | Test File | Tests Run | Passed | Failed | Status |
 |---|---|---|---|---|
 | `tests/unit/test_schemas.py` | 5 | 5 | 0 | **VALIDATED** |
+| `tests/unit/test_data_validation.py` | 4 | 4 | 0 | **VALIDATED** |
+| **Total Unit Tests** | **9** | **9** | **0** | **VALIDATED (100% PASS)** |
 
 *All Phase 1 baseline contract tests pass.*

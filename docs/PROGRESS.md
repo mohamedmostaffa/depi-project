@@ -12,7 +12,7 @@
 |---|---|---|---|---|
 | **P0** | Initial Audit & Environment Verification | **VALIDATED** | Gate M0 Passed | Completed 3-PDF audit, confirmed facts vs unknowns. |
 | **P1** | Project Foundation, Contracts & Skills | **VALIDATED** | Gate M1 Passed | Repo, schemas, 10 skills, configs, base tests ready. |
-| **P2** | RLVNT Data Engineering & Structured Catalog | **PLANNED** | Gate M2 | Extracting PDFs to `products.csv` and `policies.csv`. |
+| **P2** | RLVNT Data Engineering & Structured Catalog | **VALIDATED** | Gate M2 Passed | Extracted PDFs to `products.csv` (21 items), `policies.csv`, `orders.csv` (50 orders); 0 contradictions. |
 | **P3** | Knowledge Processing & Semantic Chunking | **PLANNED** | Gate M3 | Chunking 200–400 tokens with metadata headers. |
 | **P4** | Embeddings Benchmark & ChromaDB Vector Store | **PLANNED** | Gate M3 | Persistent Chroma with cosine distance & brand isolation. |
 | **P5** | Grounded RAG Retrieval & Similarity Threshold | **PLANNED** | Gate M3 | Top-4 retrieval, query rewrite, threshold refusal. |
@@ -36,6 +36,7 @@
 
 - [x] **M0 (Audit & Architecture Sign-Off):** Completed comprehensive inspection of `rlvntbrandidentityandpolicies.pdf`, `rlvnt_winter_collection.pdf`, and `rlvnt_outfits_collection.pdf`. Documented template placeholders and extracted 17 verified garment designs.
 - [x] **M1 (Foundation & Schema Freeze):** Initialized Git tracking (`main` branch), authored all 10 Agent Skills in `.agents/skills/`, defined Pydantic interface contracts in `src/schemas.py`, established `config/rlvnt.yaml`, `.env.example`, `pyproject.toml`, and configured test harness.
+- [x] **M2 (Data Engineering & Traceability):** Verified PDF extraction (24 pages total across 3 files), built structured catalog (`data/structured/products.csv`, 21 products), generated 50 synthetic orders (`orders.csv`), normalized `policies.csv`, and validated zero policy contradictions with automated test suite.
 
 ---
 
