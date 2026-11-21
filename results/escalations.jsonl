@@ -1,0 +1,2 @@
+{"session_id":"test_sess_esc","brand_id":"rlvnt","reason":"Customer dispute regarding damaged shipment","customer_message":"Item arrived with a broken zipper","conversation_summary":null,"escalated_at":"2026-11-21T03:23:53.523699Z","status":"PENDING_HUMAN_REVIEW"}
+{"session_id":"sess_test_api","brand_id":"rlvnt","reason":"Customer angry about delivery delay","customer_message":"Where is my package? It is late!","conversation_summary":null,"escalated_at":"2026-11-21T03:40:06.566203Z","status":"PENDING_HUMAN_REVIEW"}
