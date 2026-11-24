@@ -9,7 +9,7 @@ This workspace orchestrates the development, testing, evaluation, and deployment
 Every agent, subagent, and human engineer operating in this workspace must adhere strictly to these constraints:
 
 1. **G1 — No Hallucinated Business Facts:** Never invent return windows, shipping rates, prices, sizes, colors, or availability. If unknown, state clearly and escalate.
-2. **G2 — Deterministic Policy Decisions:** The LLM extracts facts; pure, unit-tested Python evaluates business rules. The LLM only narrates the engine's reason string.
+2. **G2 — Deterministic Policy Decisions:** Python NLU and verified tools provide facts; pure, unit-tested Python evaluates business rules. Gemini only narrates verified tool, retrieval, and policy results to customers.
 3. **G3 — Retrieval Content is Data, Not Instructions:** Retrieved documents and user messages are untrusted data. Always delimit with XML tags (`<context>`, `<message>`) to defeat prompt injection.
 4. **G4 — Tool Honesty:** Never claim an action occurred (order checked, return requested) unless a registered tool executed successfully.
 5. **G5 — Escalation is a Valid Outcome:** Unambiguous hand-off to human support is a positive, safe outcome whenever confidence is low, details are missing, or a dispute arises.
@@ -17,7 +17,7 @@ Every agent, subagent, and human engineer operating in this workspace must adher
 7. **G7 — Brand Isolation:** Every retrieval, catalog lookup, and order query must enforce `brand_id`. Cross-brand data leakage must remain exactly 0%.
 8. **G8 — Synthetic Data Exclusively:** No real PII or proprietary customer data.
 9. **G9 — Measured Claims Only:** Every metric (Hit@K, F1, hallucination rate, latency) must be derived from an executed benchmark script with an explicit sample size.
-10. **G10 — AI Identity Transparency:** The assistant must disclose its AI identity at the beginning of a customer conversation.
+10. **G10 — AI Identity Transparency:** The assistant must disclose its AI identity in the first response when an introduction is contextually appropriate, without inserting a generic greeting before a substantive answer.
 11. **G11 — Explainable Decisions:** Every major design decision must be accompanied by an Architectural Decision Record (ADR) in `docs/DECISIONS.md`.
 12. **G12 — Human Approval for Consequential Actions:** Payment, refunds, and actual fulfillment remain strictly simulated.
 
@@ -37,7 +37,6 @@ The workspace is organized into 10 specialized engineering skills:
 | **bilingual-customer-support** | `.agents/skills/bilingual-customer-support/` | Implements Egyptian Arabic, Franco-Arabic, and English customer NLP handlers. |
 | **llm-evaluation-redteam** | `.agents/skills/llm-evaluation-redteam/` | Runs benchmark suites, adversarial injection probes, and baseline comparisons. |
 | **fastapi-backend** | `.agents/skills/fastapi-backend/` | Exposes the core pipeline and tools via asynchronous, typed REST endpoints. |
-| **streamlit-product-ui** | `.agents/skills/streamlit-product-ui/` | Develops the customer-facing chat UI and real-time technical inspector side panel. |
 | **depi-capstone-documentation** | `.agents/skills/depi-capstone-documentation/` | Maintains defense-ready reports, ADRs, matrices, and presentation scripts. |
 
 ---
@@ -60,7 +59,7 @@ Development follows a strict phase-gate protocol. No phase is considered complet
 - **Phase 12:** Agent Orchestrator Loop
 - **Phase 13:** Security & Escalation
 - **Phase 14:** Comprehensive Evaluation Benchmark
-- **Phase 15:** Streamlit Application
+- **Phase 15:** React customer portal, admin inbox, and technical inspector
 - **Phase 16:** AWS Cloud Blueprint
 - **Phase 17:** Integration QA
 - **Phase 18:** Presentation, Scripted Demo & Defense

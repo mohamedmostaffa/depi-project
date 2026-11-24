@@ -88,18 +88,23 @@ def test_returns_submit_endpoint(client):
     data = resp.json()
     assert data["status"] == "SUBMITTED"
     assert data["return_request_id"].startswith("RET-")
+    assert data["message"] == "TEST_LLM_REPLY"
 
 
-def test_escalate_endpoint(client):
+def test_escalate_endpoint(client, tmp_path, monkeypatch):
     """Verify POST /escalate creates escalation record."""
+    from src.api import routes
+    monkeypatch.setattr(routes.escalation_tool, "log_path", tmp_path / "escalations.jsonl")
+    session = client.post("/api/v1/customer/session", headers={"Origin": "http://127.0.0.1:5173"})
+    csrf = session.json()["csrf_token"]
     payload = {
         "session_id": "sess_test_api",
         "brand_id": "rlvnt",
         "reason": "Customer angry about delivery delay",
         "customer_message": "Where is my package? It is late!",
     }
-    resp = client.post("/escalate", json=payload)
+    resp = client.post("/api/v1/escalate", json=payload, headers={"Origin": "http://127.0.0.1:5173", "X-CSRF-Token": csrf})
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "PENDING_HUMAN_REVIEW"
-    assert data["session_id"] == "sess_test_api"
+    assert "session_id" not in data

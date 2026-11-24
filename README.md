@@ -4,8 +4,6 @@
 [![Python 3.14](https://img.shields.io/badge/Python-3.14-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
 [![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector_Store-orange.svg)](https://www.trychroma.com/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-UI_%26_Inspector-FF4B4B.svg)](https://streamlit.io/)
-[![Pytest](https://img.shields.io/badge/Tests-73%2F73_Passing_(100%25)-brightgreen.svg)](docs/TESTING.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **"Your brand, always on."**  
@@ -18,7 +16,7 @@
 BrandMind is an agentic AI customer-service system built to solve the operational crisis facing direct-to-consumer (DTC) fashion brands across Egypt and the MENA region. 
 
 Unlike generic LLM wrappers that hallucinate policies and gamble with customer refunds, BrandMind enforces a **strict hybrid architecture**:
-1. **The LLM extracts facts** and narrates responses in RLVNT's authentic streetwear brand voice.
+1. **Gemini 2.5 Flash writes customer-facing replies** using verified RAG context, tool results, and deterministic policy decisions.
 2. **Pure, unit-tested Python evaluates business rules** (return windows, condition requirements, category exclusions).
 3. **Structured database tools** inspect live inventory and synthetic orders.
 4. **Bilingual NLP handlers** normalize Egyptian Arabic slang, numerals (`٠-٩` $\to$ `0-9`), and relative dates (`من ١٠ أيام` $\to$ ISO dates).
@@ -31,10 +29,10 @@ Unlike generic LLM wrappers that hallucinate policies and gamble with customer r
                                                    │
                                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                   PRESENTATION LAYER (Streamlit)                                        │
-│       • Streetwear Dark Theme               • Arabic RTL Support          • Real-Time Inspector Panel   │
+│                                   PRESENTATION LAYER (React)                                            │
+│       • Customer Portal • Admin Inbox • Analytics • Technical Inspector                               │
 └──────────────────────────────────────────────────┬──────────────────────────────────────────────────────┘
-                                                   │ HTTP / In-Process
+                                                   │ HTTP
                                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                  API & ORCHESTRATION LAYER (FastAPI)                                    │
@@ -70,7 +68,7 @@ BrandMind adheres strictly to 12 architectural constraints:
 | **G7** | **Brand Isolation** | Metadata enforcement `where={"brand_id": brand_id}` (0.0% data leakage) | `tests/integration/test_retrieval_isolation.py` |
 | **G8** | **Synthetic Data Exclusively** | 50 synthetic orders (`data/structured/orders.csv`) — zero real PII | `data/README.md`, `src/ingestion/generate_orders.py` |
 | **G9** | **Measured Claims Only** | All metrics derived from an automated 75-scenario benchmark runner | `docs/EVALUATION_REPORT.md`, `src/evaluation/runner.py` |
-| **G10**| **AI Transparency** | The assistant identifies itself as an AI customer agent on initial turn | `src/prompts/templates/system_base.j2` |
+| **G10**| **AI Transparency** | The assistant is transparent about its AI identity when contextually appropriate | `src/prompts/templates/system_base.j2` |
 | **G11**| **Explainable Architecture** | 10 Architectural Decision Records documenting trade-offs and rationale | `docs/DECISIONS.md` (ADR-001 through ADR-010) |
 | **G12**| **Simulated Fulfillment** | Financial transactions and courier dispatch remain strictly simulated | `src/tools/order_tools.py` |
 
@@ -120,21 +118,23 @@ py -m pip install -r requirements.txt
 py -m src.retrieval.index_kb
 ```
 
-### 4.3 Launch Streamlit Product UI & Inspector Panel
-```bash
-py -m streamlit run app/streamlit_app.py
-```
-*Open `http://localhost:8501` to test the customer chat interface and watch live rule traces in the Technical Inspector side panel.*
-
-### 4.4 Launch FastAPI Microservice
+### 4.3 Launch FastAPI Microservice
 ```bash
 py -m uvicorn src.api.app:app --host 127.0.0.1 --port 8000 --reload
 ```
 *Interactive Swagger API documentation available at `http://127.0.0.1:8000/docs`.*
 
+### 4.4 Launch React Customer Portal & Admin Inbox
+```powershell
+cd web
+npm install
+npm run dev
+```
+*Open `http://127.0.0.1:5173/` for the support dashboard and `http://127.0.0.1:5174/` for the standalone customer chat. Use the shared support credentials configured in the local `.env`; change them and configure `BRANDMIND_ADMIN_TOKEN` before production. See [`docs/ADMIN_PORTAL.md`](docs/ADMIN_PORTAL.md) for setup and prototype boundaries.*
+
 ### 4.5 Run Complete Test Suite
 ```bash
-# Executes 73 automated tests across unit, integration, security, and UI modules
+# Executes automated unit, integration, security, and evaluation tests
 py -m pytest tests/ -v
 ```
 
@@ -150,8 +150,9 @@ py -m src.evaluation.runner
 ```
 BRANDMIND/
 ├── .agents/skills/              # 10 specialized agent skill modules
-├── app/
-│   └── streamlit_app.py         # Streamlit chat interface & real-time technical inspector
+├── web/                         # React customer portal and authenticated support inbox
+│   ├── src/ui.tsx               # Customer chat, admin dashboard, inbox, and AI analytics
+│   └── src/style.css            # Responsive dark support workspace styling
 ├── config/
 │   ├── rlvnt.yaml               # Brand identity, tone, and policy configuration
 │   └── settings.yaml            # Retrieval thresholds, model weights, and system params
@@ -174,6 +175,7 @@ BRANDMIND/
 │   ├── evaluation_summary.json  # Benchmark metrics JSON
 │   └── evaluation_traces.jsonl  # 75-scenario prediction traces
 ├── src/
+│   ├── conversations/           # SQLite-backed shared conversation and message history
 │   ├── schemas.py               # Pydantic V2 interface contracts & domain models
 │   ├── agents/
 │   │   ├── orchestrator.py      # handle_turn() central state machine
@@ -202,7 +204,7 @@ BRANDMIND/
 │       ├── baselines.py         # Config A, B, C baseline runner implementations
 │       ├── metrics.py           # EvaluationMetrics calculation suite
 │       └── runner.py            # Comprehensive benchmark orchestrator
-└── tests/                       # 73 automated pytest test cases
+└── tests/                       # Unit, integration, security, and evaluation test suites
 ```
 
 ---

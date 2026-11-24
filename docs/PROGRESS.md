@@ -25,7 +25,7 @@
 | **P12** | Central Agent Orchestration Loop | **VALIDATED** | Gate M5 Passed | Constrained state machine (`handle_turn`) and audit trace in `results/audit_trace.jsonl`. |
 | **P13** | Hard Safety, Security & Escalation Module | **VALIDATED** | Gate M5 Passed | Pre-send triggers, regex/keyword union, 100% escalation recall on safety cases. |
 | **P14** | Comprehensive Evaluation & Baseline Benchmark | **VALIDATED** | Gate M6 Passed | 75 scenarios, 3-tier comparative benchmark (A, B, C), empirical scorecard in `docs/EVALUATION_REPORT.md`. |
-| **P15** | Streamlit Product UI & Inspector Panel | **VALIDATED** | Gate M6 Passed | Customer chat with real-time technical inspector side panel and Arabic RTL support. |
+| **P15** | Customer Portal & Technical Inspector | **VALIDATED** | React UI active | React customer portal/admin workspace replaces the retired Streamlit prototype. |
 | **P16** | AWS Cloud Production Architecture Blueprint | **VALIDATED** | Gate M6 Passed | S3, Bedrock, OpenSearch, Lambda, DynamoDB Single-Table spec in `docs/AWS_BLUEPRINT.md`. |
 | **P17** | End-to-End System Integration QA | **VALIDATED** | Gate M6 Passed | 70+ automated pytests passing across unit, integration, security, evaluation, and UI suites. |
 | **P18** | DEPI Presentation & Scripted Defense | **VALIDATED** | Defense Ready | 23-slide deck, 10-scenario demo script, technical defense Q&A guide. |
@@ -40,4 +40,4 @@
 - [x] **M3 (Vector Retrieval & Embeddings):** Chunked knowledge base with semantic headers, generated multilingual embeddings via `paraphrase-multilingual-MiniLM-L12-v2`, indexed in persistent ChromaDB, and calibrated similarity threshold to 0.30.
 - [x] **M4 (NLU, Memory & Deterministic Policy):** Built bilingual intent and dialect classifier, sliding window memory with coreference resolution, and pure Python policy engine with 100% boundary test coverage.
 - [x] **M5 (Tools, API & Agent Loop):** Built 4 registered tools, tool dispatcher, FastAPI REST microservice, central `AgentOrchestrator.handle_turn`, and security escalation triggers.
-- [x] **M6 (Evaluation, UI & Presentation):** Executed 75-scenario stratified benchmark comparing Config A, B, and C (100% policy accuracy, 100% escalation recall, 0% hallucination), developed Streamlit UI with live technical inspector, authored AWS production cloud blueprint, and defense presentation materials.
+- [x] **M6 (Evaluation, UI & Presentation):** Executed the benchmark, developed the React portal and Technical Inspector, authored AWS cloud blueprint, and defense presentation materials.

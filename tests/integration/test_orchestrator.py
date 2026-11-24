@@ -9,11 +9,14 @@ import pytest
 
 from src.agents.orchestrator import AgentOrchestrator
 from src.schemas import ActionType, Intent
+from src.tools.dispatcher import ToolDispatcher
+from src.tools.escalation_tool import EscalationTool
 
 
 @pytest.fixture
-def orchestrator():
-    return AgentOrchestrator(audit_file="results/test_audit.jsonl")
+def orchestrator(tmp_path):
+    dispatcher = ToolDispatcher(escalation_tool=EscalationTool(str(tmp_path / "escalations.jsonl")))
+    return AgentOrchestrator(dispatcher=dispatcher, audit_file=str(tmp_path / "test_audit.jsonl"))
 
 
 def test_orchestrator_general_returns_inquiry(orchestrator):
@@ -26,7 +29,8 @@ def test_orchestrator_general_returns_inquiry(orchestrator):
     )
     assert resp.action_type == ActionType.ANSWER
     assert resp.transparency.detected_intent == Intent.RETURNS
-    assert "14" in resp.reply
+    assert resp.transparency.generator.startswith("llm:")   # reply wording comes from the LLM, so it is not string-matched
+    assert resp.transparency.retrieved_sources
     assert resp.transparency.latency_ms > 0
 
 
@@ -43,7 +47,7 @@ def test_orchestrator_order_status_tool_flow(orchestrator):
     assert len(resp.transparency.tools_executed) == 1
     assert resp.transparency.tools_executed[0].tool_name == "get_order_status"
     assert resp.transparency.tools_executed[0].success is True
-    assert "DELIVERED" in resp.reply
+    assert resp.transparency.tools_executed[0].data["status"] or resp.transparency.tools_executed[0].data["delivery_status"]
 
 
 def test_orchestrator_exchange_decision_flow(orchestrator):
@@ -59,11 +63,17 @@ def test_orchestrator_exchange_decision_flow(orchestrator):
     assert resp.transparency.detected_intent == Intent.EXCHANGE
     assert resp.transparency.policy_decision is not None
     assert resp.transparency.policy_decision.decision == "eligible"
-    assert "مؤهل" in resp.reply
+    assert "eligible" in resp.reply.lower()   # the stub LLM echoes the policy outcome that was put in the prompt
 
 
 def test_audit_trace_file_written(orchestrator):
     """Verify full JSONL execution audit trace is persisted."""
-    audit_path = Path("results/test_audit.jsonl")
+    orchestrator.handle_turn(
+        brand_id="rlvnt",
+        session_id="audit-trace-test",
+        message="What is your return policy?",
+        today=date(2026, 11, 20),
+    )
+    audit_path = orchestrator.audit_path
     assert audit_path.exists()
     assert audit_path.stat().st_size > 0

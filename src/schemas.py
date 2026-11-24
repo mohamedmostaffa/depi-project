@@ -37,6 +37,7 @@ class Intent(str, Enum):
     ORDER_STATUS = "order_status"
     COMPLAINT = "complaint"
     HUMAN_SUPPORT = "human_support"
+    SMALL_TALK = "small_talk"  # greeting / thanks / goodbye only
 
 
 class Sentiment(str, Enum):
@@ -217,7 +218,9 @@ class TransparencyData(BaseModel):
     policy_decision: Optional[EligibilityResult] = None
     is_escalated: bool = False
     escalation_reason: Optional[str] = None
+    memory_context_messages: int = Field(default=0, ge=0)
     latency_ms: float = 0.0
+    generator: str = "llm:google:gemini-2.5-flash"
 
 
 class TurnResponse(BaseModel):

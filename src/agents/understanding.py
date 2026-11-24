@@ -27,8 +27,9 @@ class UnderstandingService:
     # Hard safety & human escalation keywords (English, Arabic, Franco)
     ESCALATION_KEYWORDS = [
         "human", "agent", "representative", "manager", "support team", "person",
-        "خدمة العملاء", "بني ادم", "بني آدم", "حد يكلمني", "مش روبوت", "مسؤول", "إنسان",
-        "lawyer", "legal", "sue", "police", "court", "محامي", "محكمة", "حماية المستهلك", "بلاغ",
+        "بني ادم", "بني آدم", "حد يكلمني", "مش روبوت", "مسؤول", "إنسان",
+        "lawyer", "legal", "sue", "police", "court", "محامي", "محكمة", "محضر", "هعمل محضر",
+        "حماية المستهلك", "بلاغ", "هشتكي رسمي", "شكوى رسمية",
         "rash", "allergy", "irritation", "medical", "doctor", "مستشفى", "حساسية", "التهاب",
         "fraud", "scam", "stole", "chargeback", "سرقة", "نصب", "احتيال",
     ]
@@ -40,11 +41,55 @@ class UnderstandingService:
         "خالص", "طب", "حاجة", "شوية", "شغال", "أبدله", "أرجعه", "أوردر"
     ]
 
+    HUMAN_SUPPORT_PHRASES = [
+        "human", "talk to a person", "speak to an agent", "customer service agent",
+        "عايز اكلم حد", "عاوز اكلم حد", "محتاج اكلم حد", "عايز اكلم موظف",
+        "عايز اكلم خدمة العملاء", "عاوز اكلم خدمة العملاء", "محتاج اكلم خدمة العملاء",
+        "اكلم خدمة العملاء", "خدمه العملاء لو سمحت", "خدمه العملا لو سمحت",
+        "وصلني بخدمة العملاء", "وصلني بخدمة العملا", "وصلني بخدمه العملاء", "وصلني بخدمه العملا",
+        "وصلني بخدمة الدعم", "وصلني بالدعم", "حولني لخدمة العملاء", "حولني للدعم",
+        "حد من الدعم", "حد من خدمه العملاء", "موظف خدمة العملاء", "موظف خدمه العملاء",
+        "حولني", "وصلني بحد", "وصلني بيهم", "وصلني بهم", "كلمني موظف", "عايز حد يكلمني",
+        "مش عايز اكلم روبوت", "مش عاوز اكلم روبوت", "بني ادم", "انسان حقيقي",
+        "3ayez aklm 7ad", "3ayez akalem 7ad", "waselni behom", "7awelni",
+    ]
+
     @classmethod
     def normalize_text(cls, text: str) -> str:
         """Converts Arabic-Indic digits to ASCII and cleans whitespace."""
         text = text.translate(cls.ARABIC_DIGIT_MAP)
         return " ".join(text.strip().split())
+
+    @classmethod
+    def _normalize_arabic_search(cls, text: str) -> str:
+        """Normalizes common Arabic spelling variants for deterministic intent matching."""
+        text = cls.normalize_text(text.lower())
+        text = re.sub(r"[\u064B-\u065F\u0670ـ]", "", text)
+        return text.translate(str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا", "ى": "ي", "ة": "ه"}))
+
+    @classmethod
+    def is_human_support_request(cls, text: str) -> bool:
+        normalized = cls._normalize_arabic_search(text)
+        phrases = [cls._normalize_arabic_search(p) for p in cls.HUMAN_SUPPORT_PHRASES]
+        if any(phrase in normalized for phrase in phrases):
+            return True
+        # Catch natural Egyptian variants and spelling mistakes such as
+        # "وصلني بخدمة العملا بقا" without matching ordinary order questions.
+        asks_to_connect = any(term in normalized for term in ("وصلني", "حولني", "كلمني", "عايز اكلم", "محتاج اكلم"))
+        mentions_support = any(term in normalized for term in ("خدمه العملاء", "خدمه العملا", "الدعم", "موظف", "ممثل"))
+        return asks_to_connect and mentions_support
+
+    @classmethod
+    def is_handoff_confirmation(cls, text: str, history: Optional[List[ConversationTurn]] = None) -> bool:
+        """Treat a brief yes as consent only when the assistant just offered human support."""
+        normalized = cls._normalize_arabic_search(text).strip(" .،!؟?")
+        if not re.fullmatch(r"(?:اه|ايوه|ايوا|تمام|ماشي|حاضر|ياريت|اكيد|اوكي|اوكى|yes|yeah|sure|ok|okay)(?:\s+(?:لو سمحت|من فضلك|يا ريت|طبعا))*", normalized):
+            return False
+        last_assistant = next((turn.content for turn in reversed(history or []) if turn.role == "assistant"), "")
+        previous = cls._normalize_arabic_search(last_assistant)
+        offered_handoff = any(term in previous for term in ("تذكره دعم", "فريق الدعم", "خدمه العملاء", "اوصلك", "اوصللك", "احولك", "هحولك"))
+        offered_as_question = any(term in previous for term in ("ممكن", "تحب", "لو حابب", "would you like", "can connect"))
+        return offered_handoff and offered_as_question
 
     @classmethod
     def detect_language_and_dialect(cls, text: str) -> Tuple[Language, Dialect]:
@@ -107,12 +152,14 @@ class UnderstandingService:
 
     @classmethod
     def classify_intent_rules(cls, text: str) -> Intent:
-        """Rule-based intent classifier baseline (robust offline fallback)."""
+        """Deterministic rule-based intent classifier; it does not generate replies."""
         t = text.lower()
 
-        if any(w in t for w in ["human", "agent", "representative", "person", "whatsapp", "telephone", "phone", "كلمني حد", "خدمة العملاء", "بني ادم", "بني آدم", "حد يكلمني", "مش روبوت", "تليفون", "واتساب"]):
+        if cls.is_human_support_request(text) or any(w in t for w in ["representative", "whatsapp", "telephone", "phone", "حد يكلمني", "تليفون", "واتساب"]):
             return Intent.HUMAN_SUPPORT
-        if any(w in t for w in ["track", "where is my order", "order status", "status of", "delivery status", "check the delivery status", "فين الأوردر", "وصل فين", "حالة الطلب", "حالة الأوردر", "شوفلي الأوردر"]):
+        order_id_only = bool(re.fullmatch(r"\s*(?:#\s*)?(?:RLVNT|ORDR?|ORDER)[-_ ]\d{3,8}\s*[.!؟?]*\s*", t, re.IGNORECASE))
+        has_order_id = bool(re.search(r"\b(?:RLVNT|ORDR?|ORDER)[-_ ]\d{3,8}\b", t, re.IGNORECASE))
+        if order_id_only or any(w in t for w in ["track", "where is my order", "order status", "status of", "delivery status", "check the delivery status", "order number", "فين الأوردر", "فين الطلب", "فين طلبي", "وصل فين", "حالة الطلب", "حالة الأوردر", "رقم الأوردر", "رقم الطلب", "شوفلي الأوردر", "تتبع الأوردر"]):
             return Intent.ORDER_STATUS
         if any(w in t for w in ["damaged", "broken", "defect", "stain", "tear", "torn", "باظ", "مقطوع", "عيب", "غير اللي طلبته", "سوستة", "سرقة", "نصب", "حساسية", "التهاب", "قضية", "محضر"]):
             return Intent.COMPLAINT
@@ -128,6 +175,8 @@ class UnderstandingService:
             return Intent.SHIPPING
         if any(w in t for w in ["available", "in stock", "have in", "colors", "متاح", "متوفر", "في منه", "ألوان"]):
             return Intent.AVAILABILITY
+        if has_order_id:
+            return Intent.ORDER_STATUS
         if any(w in t for w in ["price", "cost", "how much", "material", "cotton", "wash", "care", "fabric", "gsm", "سعر", "بكام", "خامة", "قطن", "غسيل", "مقاسات", "أوفر سايز", "فروع"]):
             return Intent.PRODUCT_INFO
 
@@ -141,8 +190,9 @@ class UnderstandingService:
         norm = cls.normalize_text(text)
         entities = ExtractedEntities()
 
-        # 1. Order ID pattern (e.g. RLVNT-1001)
-        match_order = re.search(r'\b(RLVNT-\d{4})\b', norm, re.IGNORECASE)
+        # Accept both the local RLVNT form and customer-provided ORD IDs. Keep the
+        # exact prefix/value so the order tool can report an exact not-found result.
+        match_order = re.search(r'\b((?:RLVNT|ORDR?|ORDER)[-_ ]\d{3,8})\b', norm, re.IGNORECASE)
         if match_order:
             entities.order_id = match_order.group(1).upper()
 
@@ -286,6 +336,14 @@ class UnderstandingService:
         """Processes message into structured understanding output with Pydantic validation."""
         norm_text = cls.normalize_text(text)
         lang, dialect = cls.detect_language_and_dialect(norm_text)
+        # An order ID by itself contains no language signal. Inherit the latest
+        # customer's language so an ID sent in an Arabic chat does not switch the
+        # answer to English just because its characters are Latin.
+        if re.fullmatch(r"\s*(?:#\s*)?(?:RLVNT|ORDR?|ORDER)[-_ ]\d{3,8}\s*[.!؟?]*\s*", norm_text, re.IGNORECASE):
+            for turn in reversed(history or []):
+                if turn.role == "customer" and re.search(r"[\u0600-\u06FF]", turn.content):
+                    lang, dialect = cls.detect_language_and_dialect(turn.content)
+                    break
         requires_human, safety_reason = cls.check_hard_safety_triggers(norm_text)
 
         intent = cls.classify_intent_rules(norm_text)

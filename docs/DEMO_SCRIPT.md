@@ -11,11 +11,11 @@ Before presenting to the DEPI evaluation panel, verify the following:
   ```bash
   py -m uvicorn src.api.app:app --host 127.0.0.1 --port 8000
   ```
-- [ ] Terminal 2: Streamlit Product UI running:
+- [ ] Terminal 2: React customer portal and admin inbox running:
   ```bash
-  py -m streamlit run app/streamlit_app.py
+  cd web && npm run dev
   ```
-- [ ] Browser window opened to `http://localhost:8501` with sidebar expanded.
+- [ ] Browser window opened to `http://localhost:5173/` (admin) or `/customer` (customer portal).
 - [ ] Reset button clicked (`🔄 Reset Chat`) to ensure a fresh session.
 
 ---
@@ -25,7 +25,7 @@ Before presenting to the DEPI evaluation panel, verify the following:
 ### Step 1: Brand Greeting & AI Identity Transparency (Enforcing G10)
 - **Presenter Prompt:** `"Hello! Who are you and what do you do?"`
 - **What to Explain to Panel:**
-  > *"Notice Golden Rule G10 in action: The assistant immediately identifies itself as an AI assistant for RLVNT, setting clear customer expectations without impersonating a human employee."*
+  > *"The assistant identifies itself as AI when an introduction is useful, while answering substantive requests directly without a canned greeting."*
 - **Inspector Panel Verification:**
   - `Intent`: `PRODUCT_INFO` / `GENERAL`
   - `Language`: `EN`
@@ -142,6 +142,6 @@ Before presenting to the DEPI evaluation panel, verify the following:
 ## 3. Contingency & Backup Plan (Failure Mitigation)
 
 If live network connectivity or external servers fail during the presentation:
-1. **FastAPI Disconnection:** The Streamlit UI automatically detects API timeouts and switches to the embedded in-process `AgentOrchestrator` in 0 milliseconds without disrupting the demonstration.
+1. **Gemini service unavailable:** the API returns a clear 503 and does not fabricate a customer reply.
 2. **Offline Sentence-Transformers:** The embedding model and ChromaDB collection are fully persisted locally in `./chroma_db`, requiring zero internet connectivity.
-3. **Mock LLM Fallback:** The orchestrator features an offline deterministic generator (`src/llm/mock_client.py`), ensuring that demo responses and policy traces render perfectly even in airplane mode.
+3. **Gemini-only generation:** customer-facing responses require the configured Gemini 2.5 Flash API; the product does not send mock replies when Gemini is unavailable.

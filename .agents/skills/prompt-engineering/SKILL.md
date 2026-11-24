@@ -24,7 +24,7 @@ This skill establishes guidelines for authoring, versioning, and testing layered
    - Hard reminder at the end of the prompt: *"Answer ONLY from verified context and decisions."*
 3. **Brand Personality Rules:**
    - Populate from `config/<brand>.yaml` (e.g. `config/rlvnt.yaml`).
-   - For RLVNT: streetwear-focused, authentic, confident, youthful, helpful.
+   - For RLVNT: professional, natural, concise, and helpful. Keep product language factual; do not add slang, automatic greetings, or emojis.
    - Low temperature ($\le 0.1$) for JSON extraction; moderate temperature ($0.3–0.4$) for grounded customer dialogue.
 
 ## Testing & Validation Checklist

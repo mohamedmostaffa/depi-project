@@ -8,11 +8,14 @@ import pytest
 
 from src.agents.orchestrator import AgentOrchestrator
 from src.schemas import ActionType
+from src.tools.dispatcher import ToolDispatcher
+from src.tools.escalation_tool import EscalationTool
 
 
 @pytest.fixture
-def orchestrator():
-    return AgentOrchestrator(audit_file="results/test_security_audit.jsonl")
+def orchestrator(tmp_path):
+    dispatcher = ToolDispatcher(escalation_tool=EscalationTool(str(tmp_path / "escalations.jsonl")))
+    return AgentOrchestrator(dispatcher=dispatcher, audit_file=str(tmp_path / "test_security_audit.jsonl"))
 
 
 def test_adversarial_ignore_rules_prompt_injection(orchestrator):

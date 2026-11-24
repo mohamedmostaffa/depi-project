@@ -58,3 +58,19 @@ class OrderTool:
             total_amount=float(row["total_amount"]),
             currency=row.get("currency", "EGP"),
         )
+
+    def get_customer_name(self, order_id: str, brand_id: str = "rlvnt") -> Optional[str]:
+        """Return the name tied to a verified order for internal support use."""
+        if self._df.empty or not order_id or "customer_name" not in self._df.columns:
+            return None
+        matched = self._df[
+            (self._df["order_id"].str.lower() == order_id.lower())
+            & (self._df["brand_id"] == brand_id)
+        ]
+        if matched.empty:
+            return None
+        value = matched.iloc[0].get("customer_name")
+        if pd.isna(value):
+            return None
+        name = str(value).strip()
+        return name or None

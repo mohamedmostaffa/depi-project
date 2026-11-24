@@ -37,7 +37,7 @@
 
 ### Slide 5: System Architecture: 6 Decoupled Layers
 - **Diagram Walkthrough:**
-  1. *Presentation Layer:* Streamlit Chat UI + Real-Time Inspector Side Panel.
+  1. *Presentation Layer:* React customer portal, admin inbox, and Technical Inspector.
   2. *API & Orchestration Layer:* FastAPI REST endpoints + `AgentOrchestrator.handle_turn()`.
   3. *NLU & Memory Layer:* Dialect detector, intent classifier, sliding window memory ($N=8$).
   4. *Deterministic Business Layer:* Pure Python `PolicyEngine` (100% test coverage).
@@ -99,7 +99,7 @@
   - `GET /health` — Service health check.
 - **Validation:** Pydantic V2 schemas for 100% type safety and runtime validation.
 
-### Slide 15: Streamlit Product UI & Live Inspector (ADR-008)
+### Slide 15: React Product UI & Live Inspector (replaces the retired Streamlit prototype)
 - **Consumer Chat Window:** Dark streetwear aesthetic, RLVNT crimson accents, right-to-left (RTL) Arabic text rendering.
 - **Technical Inspector Panel:** Real-time visibility into intent, confidence, retrieved chunk citations, tool executions, rule traces, and latency.
 - **Resilience:** Auto-switching in-process fallback if API service is disconnected.

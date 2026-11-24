@@ -4,12 +4,18 @@
 ESCALATION REASON:
 {{ escalation_reason }}
 
+ESCALATION TOOL SUCCEEDED:
+{{ escalation_succeeded }}
+
+ESCALATION RECORD STATUS:
+{{ escalation_status }}
+
 CUSTOMER MESSAGE:
 <customer_message>
 {{ customer_message }}
 </customer_message>
 
 INSTRUCTIONS:
-Craft a short, empathetic, professional hand-off message explaining that a human support team member is taking over this case.
-Mirror the customer's language (Egyptian Arabic if Arabic, English if English).
-Do not make financial promises or guess outcomes. Keep it to 1-2 reassuring sentences.
+If the escalation tool succeeded and returned a record status, state briefly that the request was recorded for human review. This does not mean a human agent has joined; do not promise a response time.
+If the escalation tool failed or returned no status, clearly say that the request was not submitted and do not imply that a handoff occurred. Do not expose internal errors; give one practical next step.
+Mirror the customer's language and dialect. Keep the message concise, professional, and free of automatic greetings or emojis.

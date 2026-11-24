@@ -14,8 +14,8 @@ from src.tools.escalation_tool import EscalationTool
 
 
 @pytest.fixture
-def dispatcher():
-    return ToolDispatcher()
+def dispatcher(tmp_path):
+    return ToolDispatcher(escalation_tool=EscalationTool(str(tmp_path / "escalations.jsonl")))
 
 
 def test_search_products_tool(dispatcher):

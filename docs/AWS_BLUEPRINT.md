@@ -73,12 +73,12 @@ The table below contrasts the local proof-of-concept stack with the enterprise A
 | Architectural Component | BrandMind MVP (Local) | AWS Enterprise Production Cloud | Rationale & Enterprise Benefits |
 |---|---|---|---|
 | **API & Ingress** | FastAPI on `localhost:8000` | **Amazon API Gateway** + **AWS WAF** | Managed TLS termination, global rate limiting, token bucket throttling, and protection against automated bot scraping. |
-| **Edge Delivery** | Local Streamlit HTTP | **Amazon CloudFront** | Low-latency CDN edge delivery across Cairo, Riyadh, and Dubai edge locations with cached UI assets. |
+| **Edge Delivery** | React web app assets | **Amazon CloudFront** | Low-latency CDN edge delivery across Cairo, Riyadh, and Dubai edge locations with cached UI assets. |
 | **Compute Orchestrator** | Python 3.14 Local Runtime | **Amazon ECS on AWS Fargate** | Zero server management; serverless autoscaling containers scaling horizontally from 2 to 20 tasks based on CPU/traffic spikes. |
 | **Document Ingestion** | `pdf_extractor.py` (Local) | **AWS Lambda** (Triggered by S3 PutObject) | Asynchronous, event-driven PDF extraction, chunking, and embedding generation upon raw lookbook upload. |
 | **Vector Store** | Persistent ChromaDB (Local SQLite) | **Amazon OpenSearch Serverless (Vector Engine)** | Scalable vector search with isolated tenant indices, cosine distance indexing, and automatic replication without managing clusters. |
 | **Embeddings Model** | `sentence-transformers` (MiniLM) | **Amazon Bedrock (Titan Multilingual Embeddings G1)** | Managed, highly performant 1536-dimensional embeddings with native support for Arabic dialects and English without GPU overhead. |
-| **LLM Generation** | Offline Mock / Live Client | **Amazon Bedrock (Claude 3.5 Sonnet / Amazon Nova Pro)** | Enterprise GenAI with zero data retention, sub-second TTFT, cross-region failover, and strict latency SLA guarantees. |
+| **LLM Generation** | Google Gemini 2.5 Flash | **Amazon Bedrock (Claude 3.5 Sonnet / Amazon Nova Pro)** | Alternative future deployment option; current application is Gemini-only. |
 | **Structured Database** | CSV Files (`orders.csv`, `products.csv`) | **Amazon DynamoDB** (Global Tables) | Single-digit millisecond latency at any scale, ACID transactions for order state and return registrations, automatic point-in-time recovery (PITR). |
 | **Session Memory** | Python `SessionManager` in RAM | **Amazon ElastiCache (Redis)** + **DynamoDB TTL** | Sub-millisecond sliding window session state cached in Redis with durable long-term storage in DynamoDB with 30-day Time-To-Live. |
 | **Audit Logging** | `results/audit_trace.jsonl` | **Amazon CloudWatch Logs** + **Amazon Kinesis Firehose $\to$ S3 Glacier** | Immutable compliance logging, auditable turn traces, automated anomaly detection, and long-term cost-efficient cold storage. |

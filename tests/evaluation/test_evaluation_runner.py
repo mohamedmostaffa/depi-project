@@ -51,8 +51,11 @@ def test_direct_llm_baseline_runs():
     assert out["is_escalated"] is False
 
 
-def test_brandmind_full_system_smoke():
-    full = FullBrandMindSystem()
+def test_brandmind_full_system_smoke(tmp_path):
+    from src.agents.orchestrator import AgentOrchestrator
+
+    orchestrator = AgentOrchestrator(audit_file=str(tmp_path / "evaluation_audit_trace.jsonl"))
+    full = FullBrandMindSystem(orchestrator=orchestrator)
     out = full.run("What is RLVNT's return window?", session_id="test_eval_smoke")
     assert "reply" in out
     assert len(out["retrieved_sources"]) > 0

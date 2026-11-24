@@ -4,6 +4,7 @@ Executes Config A (Direct LLM), Config B (RAG-Only), and Config C (BrandMind Ful
 against the stratified test set, evaluates metrics, and outputs summary JSON & Markdown report.
 """
 
+import csv
 import json
 import time
 from pathlib import Path
@@ -12,7 +13,9 @@ from typing import Any, Dict, List
 from src.evaluation.baselines import (
     DirectLLMBaseline,
     FullBrandMindSystem,
+    MANUAL_EVALUATION_FIELDS,
     RAGOnlyBaseline,
+    failed_result,
 )
 from src.evaluation.metrics import EvaluationMetrics
 
@@ -26,15 +29,29 @@ class EvaluationBenchmarkRunner:
         output_summary_path: str = "results/evaluation_summary.json",
         output_report_path: str = "docs/EVALUATION_REPORT.md",
         output_traces_path: str = "results/evaluation_traces.jsonl",
+        gemini_csv_path: str = "results/gemini_baseline.csv",
+        rag_csv_path: str = "results/rag_only_results.csv",
+        full_csv_path: str = "results/brandmind_full_results.csv",
+        config_a: Any = None,
+        config_b: Any = None,
+        config_c: Any = None,
     ):
         self.dataset_path = Path(dataset_path)
         self.output_summary_path = Path(output_summary_path)
         self.output_report_path = Path(output_report_path)
         self.output_traces_path = Path(output_traces_path)
+        self.csv_paths = {
+            "config_a": Path(gemini_csv_path),
+            "config_b": Path(rag_csv_path),
+            "config_c": Path(full_csv_path),
+        }
+        self.configs = {"config_a": config_a, "config_b": config_b, "config_c": config_c}
 
         self.output_summary_path.parent.mkdir(parents=True, exist_ok=True)
         self.output_report_path.parent.mkdir(parents=True, exist_ok=True)
         self.output_traces_path.parent.mkdir(parents=True, exist_ok=True)
+        for path in self.csv_paths.values():
+            path.parent.mkdir(parents=True, exist_ok=True)
 
     def load_dataset(self) -> List[Dict[str, Any]]:
         with open(self.dataset_path, "r", encoding="utf-8") as f:
@@ -44,15 +61,45 @@ class EvaluationBenchmarkRunner:
         dataset = self.load_dataset()
         print(f"Loaded {len(dataset)} evaluation scenarios from {self.dataset_path}")
 
-        from src.retrieval.hybrid_retriever import HybridRetriever
-        from src.agents.orchestrator import AgentOrchestrator
+        # Build each configuration independently so initialization/API failures are
+        # recorded per result row instead of silently switching to a mock response.
+        initialization_errors: Dict[str, Exception] = {}
+        if any(self.configs[key] is None for key in self.configs):
+            from src.retrieval.hybrid_retriever import HybridRetriever
 
-        shared_retriever = HybridRetriever()
-        shared_orchestrator = AgentOrchestrator(retriever=shared_retriever)
+            try:
+                shared_retriever = HybridRetriever()
+            except Exception as exc:
+                shared_retriever = None
+                initialization_errors["retriever"] = exc
+            if self.configs["config_a"] is None:
+                try:
+                    self.configs["config_a"] = DirectLLMBaseline()
+                except Exception as exc:
+                    initialization_errors["config_a"] = exc
+            if self.configs["config_b"] is None:
+                if shared_retriever is None:
+                    initialization_errors["config_b"] = initialization_errors["retriever"]
+                else:
+                    try:
+                        self.configs["config_b"] = RAGOnlyBaseline(retriever=shared_retriever)
+                    except Exception as exc:
+                        initialization_errors["config_b"] = exc
+            if self.configs["config_c"] is None:
+                try:
+                    from src.agents.orchestrator import AgentOrchestrator
 
-        config_a = DirectLLMBaseline()
-        config_b = RAGOnlyBaseline(retriever=shared_retriever)
-        config_c = FullBrandMindSystem(orchestrator=shared_orchestrator)
+                    orchestrator = AgentOrchestrator(
+                        retriever=shared_retriever,
+                        audit_file="results/evaluation_audit_trace.jsonl",
+                    )
+                    self.configs["config_c"] = FullBrandMindSystem(orchestrator=orchestrator)
+                except Exception as exc:
+                    initialization_errors["config_c"] = exc
+
+        config_a = self.configs["config_a"]
+        config_b = self.configs["config_b"]
+        config_c = self.configs["config_c"]
 
         results_a: List[Dict[str, Any]] = []
         results_b: List[Dict[str, Any]] = []
@@ -61,13 +108,47 @@ class EvaluationBenchmarkRunner:
         traces: List[Dict[str, Any]] = []
 
         print("Executing benchmark across configurations A, B, and C...")
+        quota_exhausted = False
         for idx, item in enumerate(dataset, 1):
             q = item["question"]
             qid = item["id"]
 
-            res_a = config_a.run(q)
-            res_b = config_b.run(q)
-            res_c = config_c.run(q, session_id=f"eval_sess_{qid}")
+            if quota_exhausted:
+                quota_error = RuntimeError("Gemini API quota was exhausted by an earlier scenario")
+                res_a = failed_result(quota_error, model_name=self._model_name(config_a, "config_a"))
+                res_b = failed_result(quota_error, model_name=self._model_name(config_b, "config_b"))
+                res_c = failed_result(quota_error, model_name=self._model_name(config_c, "config_c"))
+            else:
+                res_a = self._run_config(config_a, "config_a", q, initialization_errors)
+                if "(429)" in res_a.get("error", ""):
+                    quota_exhausted = True
+                if quota_exhausted:
+                    quota_error = RuntimeError("Gemini API quota was exhausted by an earlier configuration")
+                    res_b = failed_result(quota_error, model_name=self._model_name(config_b, "config_b"))
+                    res_c = failed_result(quota_error, model_name=self._model_name(config_c, "config_c"))
+                else:
+                    res_b = self._run_config(config_b, "config_b", q, initialization_errors)
+                    if "(429)" in res_b.get("error", ""):
+                        quota_exhausted = True
+                    if quota_exhausted:
+                        res_c = failed_result(
+                            RuntimeError("Gemini API quota was exhausted by an earlier configuration"),
+                            model_name=self._model_name(config_c, "config_c"),
+                        )
+                    else:
+                        res_c = self._run_config(config_c, "config_c", q, initialization_errors, qid=qid)
+                        if "(429)" in res_c.get("error", ""):
+                            quota_exhausted = True
+
+            common = {
+                "test_id": qid,
+                "language": item.get("language", ""),
+                "category": item.get("category", ""),
+                "customer_question": q,
+            }
+            res_a.update(common)
+            res_b.update(common)
+            res_c.update(common)
 
             results_a.append(res_a)
             results_b.append(res_b)
@@ -83,8 +164,12 @@ class EvaluationBenchmarkRunner:
             }
             traces.append(trace_entry)
 
-            if idx % 15 == 0 or idx == len(dataset):
+            if idx % 5 == 0 or idx == len(dataset) or quota_exhausted:
                 print(f"Processed {idx}/{len(dataset)} scenarios...")
+
+        # Export standalone, editable CSVs with manual review columns.
+        for config_key, result_rows in (("config_a", results_a), ("config_b", results_b), ("config_c", results_c)):
+            self._write_results_csv(self.csv_paths[config_key], result_rows)
 
         # Save trace logs
         with open(self.output_traces_path, "w", encoding="utf-8") as f:
@@ -98,11 +183,67 @@ class EvaluationBenchmarkRunner:
         with open(self.output_summary_path, "w", encoding="utf-8") as f:
             json.dump(metrics_summary, f, ensure_ascii=False, indent=2)
 
-        # Generate defense-ready Markdown report
-        self._generate_markdown_report(metrics_summary, dataset)
-
-        print(f"Benchmark completed! Summary at {self.output_summary_path}, Report at {self.output_report_path}")
+        # The old defense report contains conclusions based on fabricated baseline
+        # replies. Leave it untouched; only fresh Gemini results belong in new CSVs.
+        print(f"Benchmark completed! Summary at {self.output_summary_path}")
+        for path in self.csv_paths.values():
+            print(f"CSV results at {path}")
         return metrics_summary
+
+    @staticmethod
+    def _model_name(config: Any, key: str) -> str:
+        if key == "config_c":
+            llm = getattr(getattr(config, "orchestrator", None), "live_llm", None)
+            return getattr(llm, "model_name", "") if llm else ""
+        return getattr(config, "model_name", "")
+
+    @staticmethod
+    def _run_config(config: Any, key: str, question: str, init_errors: Dict[str, Exception], qid: str = "") -> Dict[str, Any]:
+        error = init_errors.get(key)
+        if error is None and config is None:
+            error = RuntimeError("Configuration failed to initialize")
+        if error is not None:
+            return failed_result(error)
+        started = time.perf_counter()
+        try:
+            if key == "config_c":
+                return config.run(question, session_id=f"eval_sess_{qid}")
+            return config.run(question)
+        except Exception as exc:
+            retriever_proxy = getattr(config, "_timed_retriever", None)
+            llm_proxy = getattr(config, "_timed_llm", None)
+            return failed_result(
+                exc,
+                provider=getattr(config, "provider", "google"),
+                model_name=getattr(config, "model_name", ""),
+                retrieval_latency_ms=(
+                    getattr(config, "last_retrieval_latency_ms", 0.0)
+                    or getattr(retriever_proxy, "last_retrieval_latency_ms", 0.0)
+                ),
+                generation_latency_ms=(
+                    getattr(config, "last_generation_latency_ms", 0.0)
+                    or getattr(llm_proxy, "last_generation_latency_ms", 0.0)
+                ),
+                total_latency_ms=(time.perf_counter() - started) * 1000,
+            )
+
+    @staticmethod
+    def _write_results_csv(path: Path, rows: List[Dict[str, Any]]) -> None:
+        columns = [
+            "test_id", "language", "category", "customer_question", "reply",
+            "generator", "provider", "model_name", "retrieved_sources", "tools_executed",
+            "is_escalated", "retrieval_top_similarity", "retrieval_is_covered",
+            "retrieval_latency_ms", "generation_latency_ms", "total_latency_ms",
+            "status", "error", *MANUAL_EVALUATION_FIELDS,
+        ]
+        with path.open("w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
+            writer.writeheader()
+            for row in rows:
+                serializable = dict(row)
+                for column in ("retrieved_sources", "tools_executed"):
+                    serializable[column] = json.dumps(row.get(column, []), ensure_ascii=False)
+                writer.writerow(serializable)
 
     def _calculate_all_metrics(
         self,
@@ -111,108 +252,77 @@ class EvaluationBenchmarkRunner:
         res_b: List[Dict[str, Any]],
         res_c: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        gold_chunk_ids = [item.get("gold_chunk_ids", []) for item in dataset]
-        gold_intents = [item.get("expected_intent") for item in dataset]
-        gold_decisions = [item.get("expected_decision") for item in dataset]
-        gold_tools = [item.get("expected_tool") for item in dataset]
-        gold_escalations = [item.get("expected_escalation", False) for item in dataset]
-        gold_facts = [item.get("ground_truth_fact", "") for item in dataset]
-        questions = [item.get("question", "") for item in dataset]
-        categories = [item.get("category", "") for item in dataset]
+        def successful_pairs(results: List[Dict[str, Any]]):
+            pairs = [(dataset[i], row) for i, row in enumerate(results) if row.get("status") == "ok"]
+            return [pair[0] for pair in pairs], [pair[1] for pair in pairs]
 
-        # 1. Retrieval Metrics (Only B and C have retrievers)
-        retrieval_b = EvaluationMetrics.compute_retrieval_metrics(
-            [r["retrieved_sources"] for r in res_b], gold_chunk_ids, k=4
-        )
-        retrieval_c = EvaluationMetrics.compute_retrieval_metrics(
-            [r["retrieved_sources"] for r in res_c], gold_chunk_ids, k=4
-        )
-        retrieval_a = {"hit@4": 0.0, "mrr@4": 0.0, "precision@4": 0.0, "evaluated_queries": retrieval_c["evaluated_queries"]}
+        def compute(results: List[Dict[str, Any]], config: str) -> Dict[str, Any]:
+            cases, rows = successful_pairs(results)
+            gold_chunk_ids = [item.get("gold_chunk_ids", []) for item in cases]
+            gold_intents = [item.get("expected_intent") for item in cases]
+            gold_decisions = [item.get("expected_decision") for item in cases]
+            gold_tools = [item.get("expected_tool") for item in cases]
+            gold_escalations = [item.get("expected_escalation", False) for item in cases]
+            gold_facts = [item.get("ground_truth_fact", "") for item in cases]
+            questions = [item.get("question", "") for item in cases]
+            categories = [item.get("category", "") for item in cases]
+            retrieval = EvaluationMetrics.compute_retrieval_metrics(
+                [
+                    [s.get("chunk_id", "") if isinstance(s, dict) else str(s) for s in r["retrieved_sources"]]
+                    for r in rows
+                ],
+                gold_chunk_ids,
+                k=4,
+            )
+            hallucination = EvaluationMetrics.compute_hallucination_rate(
+                [r["reply"] for r in rows], gold_facts, questions, categories,
+                is_config_a=(config == "config_a"), is_config_b=(config == "config_b"),
+            )
+            policy = EvaluationMetrics.compute_policy_accuracy(
+                [r["decision"] for r in rows], gold_decisions
+            )
+            tools = EvaluationMetrics.compute_tool_accuracy(
+                [r["tools_executed"][0] if r["tools_executed"] else None for r in rows], gold_tools
+            )
+            escalation = EvaluationMetrics.compute_escalation_recall(
+                [r["is_escalated"] for r in rows], gold_escalations
+            )
+            latency = EvaluationMetrics.compute_latency_distribution([r["total_latency_ms"] for r in rows])
+            return {
+                "successful_requests": len(rows),
+                "failed_requests": len(results) - len(rows),
+                "retrieval": retrieval,
+                "hallucination": hallucination,
+                "policy_accuracy": policy,
+                "tool_accuracy": tools,
+                "escalation_recall": escalation,
+                "latency": latency,
+                "intent_metrics": EvaluationMetrics.compute_intent_metrics(
+                    [r["detected_intent"] or "" for r in rows], gold_intents
+                ) if config == "config_c" else None,
+            }
 
-        # 2. Hallucination Rates
-        hallucination_a = EvaluationMetrics.compute_hallucination_rate(
-            [r["reply"] for r in res_a], gold_facts, questions, categories, is_config_a=True
-        )
-        hallucination_b = EvaluationMetrics.compute_hallucination_rate(
-            [r["reply"] for r in res_b], gold_facts, questions, categories, is_config_b=True
-        )
-        hallucination_c = EvaluationMetrics.compute_hallucination_rate(
-            [r["reply"] for r in res_c], gold_facts, questions, categories, is_config_a=False, is_config_b=False
-        )
-
-        # 3. Policy Decision Accuracy
-        policy_a = EvaluationMetrics.compute_policy_accuracy(
-            [r["decision"] for r in res_a], gold_decisions
-        )
-        policy_b = EvaluationMetrics.compute_policy_accuracy(
-            [r["decision"] for r in res_b], gold_decisions
-        )
-        policy_c = EvaluationMetrics.compute_policy_accuracy(
-            [r["decision"] for r in res_c], gold_decisions
-        )
-
-        # 4. Tool Execution Accuracy
-        tools_a = EvaluationMetrics.compute_tool_accuracy(
-            [r["tools_executed"][0] if r["tools_executed"] else None for r in res_a], gold_tools
-        )
-        tools_b = EvaluationMetrics.compute_tool_accuracy(
-            [r["tools_executed"][0] if r["tools_executed"] else None for r in res_b], gold_tools
-        )
-        tools_c = EvaluationMetrics.compute_tool_accuracy(
-            [r["tools_executed"][0] if r["tools_executed"] else None for r in res_c], gold_tools
-        )
-
-        # 5. Escalation Recall (Target: 100% on safety cases)
-        esc_a = EvaluationMetrics.compute_escalation_recall(
-            [r["is_escalated"] for r in res_a], gold_escalations
-        )
-        esc_b = EvaluationMetrics.compute_escalation_recall(
-            [r["is_escalated"] for r in res_b], gold_escalations
-        )
-        esc_c = EvaluationMetrics.compute_escalation_recall(
-            [r["is_escalated"] for r in res_c], gold_escalations
-        )
-
-        # 6. Intent Classification (Config C)
-        intent_c = EvaluationMetrics.compute_intent_metrics(
-            [r["detected_intent"] for r in res_c], gold_intents
-        )
-
-        # 7. Latency
-        latency_a = EvaluationMetrics.compute_latency_distribution([r["latency_ms"] for r in res_a])
-        latency_b = EvaluationMetrics.compute_latency_distribution([r["latency_ms"] for r in res_b])
-        latency_c = EvaluationMetrics.compute_latency_distribution([r["latency_ms"] for r in res_c])
+        cfg_a = compute(res_a, "config_a")
+        cfg_b = compute(res_b, "config_b")
+        cfg_c = compute(res_c, "config_c")
+        retrieval_a = {"hit@4": 0.0, "mrr@4": 0.0, "precision@4": 0.0,
+                       "evaluated_queries": cfg_a["retrieval"]["evaluated_queries"]}
 
         return {
             "total_scenarios": len(dataset),
             "configurations": {
                 "config_a_direct_llm": {
                     "name": "Config A: Direct LLM Baseline",
+                    **cfg_a,
                     "retrieval": retrieval_a,
-                    "hallucination": hallucination_a,
-                    "policy_accuracy": policy_a,
-                    "tool_accuracy": tools_a,
-                    "escalation_recall": esc_a,
-                    "latency": latency_a,
                 },
                 "config_b_rag_only": {
                     "name": "Config B: RAG-Only Baseline",
-                    "retrieval": retrieval_b,
-                    "hallucination": hallucination_b,
-                    "policy_accuracy": policy_b,
-                    "tool_accuracy": tools_b,
-                    "escalation_recall": esc_b,
-                    "latency": latency_b,
+                    **cfg_b,
                 },
                 "config_c_brandmind_full": {
                     "name": "Config C: Full BrandMind System",
-                    "retrieval": retrieval_c,
-                    "hallucination": hallucination_c,
-                    "policy_accuracy": policy_c,
-                    "tool_accuracy": tools_c,
-                    "escalation_recall": esc_c,
-                    "intent_metrics": intent_c,
-                    "latency": latency_c,
+                    **cfg_c,
                 },
             },
         }

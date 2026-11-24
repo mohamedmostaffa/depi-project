@@ -4,20 +4,22 @@ Deterministic state machine: understand -> retrieve -> decide -> act -> respond 
 """
 
 import json
+import logging
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from src.agents.smalltalk import is_small_talk
 from src.agents.understanding import UnderstandingService
 from src.llm.client import LLMClient
-from src.llm.mock_client import MockLLMClient
 from src.memory.session_manager import SessionManager
 from src.prompts.template_manager import PromptTemplateManager
 from src.retrieval.hybrid_retriever import HybridRetriever
 from src.schemas import (
     ActionType,
     CustomerTurnInput,
+    Dialect,
     EligibilityResult,
     Intent,
     Language,
@@ -26,6 +28,16 @@ from src.schemas import (
     TurnResponse,
 )
 from src.tools.dispatcher import ToolDispatcher
+
+logger = logging.getLogger(__name__)
+
+
+class GeminiGenerationError(RuntimeError):
+    """Safe application-level error raised when Gemini cannot generate a reply."""
+
+    def __init__(self, *, escalation_succeeded: bool = False):
+        super().__init__("Gemini response generation is unavailable.")
+        self.escalation_succeeded = escalation_succeeded
 
 
 class AgentOrchestrator:
@@ -39,18 +51,35 @@ class AgentOrchestrator:
         prompt_manager: Optional[PromptTemplateManager] = None,
         audit_file: str = "results/audit_trace.jsonl",
     ):
+        """Use Gemini 2.5 Flash as the only customer-facing response generator."""
         self.retriever = retriever or HybridRetriever()
         self.dispatcher = dispatcher or ToolDispatcher()
         self.session_manager = session_manager or SessionManager()
         self.prompt_manager = prompt_manager or PromptTemplateManager()
         self.audit_path = Path(audit_file)
         self.audit_path.parent.mkdir(parents=True, exist_ok=True)
-        self.mock_llm = MockLLMClient()
-        self.live_llm = None
         try:
             self.live_llm = LLMClient()
-        except Exception:
-            self.live_llm = None
+        except Exception as exc:
+            raise RuntimeError("Gemini 2.5 Flash could not be initialized.") from exc
+        if self.live_llm.provider != "google":
+            raise RuntimeError("Only Google Gemini is supported for customer response generation.")
+
+    def _llm_reply(self, template_name: str, ctx: Dict[str, Any]) -> str:
+        """Generate a non-empty customer-facing response with Gemini or raise safely."""
+        try:
+            prompt = self.prompt_manager.render(template_name, ctx)
+            reply = self.live_llm.generate(prompt, temperature=0.3)
+            if not isinstance(reply, str) or not reply.strip():
+                raise ValueError("Gemini returned an empty response")
+            return reply.strip()
+        except Exception as exc:
+            logger.exception("Gemini generation failed; no canned fallback will be sent.")
+            raise GeminiGenerationError() from exc
+
+    def generate_customer_message(self, template_name: str, context: Dict[str, Any]) -> str:
+        """Generate a Gemini-authored message for a verified non-chat tool result."""
+        return self._llm_reply(template_name, context)
 
     def handle_turn(
         self,
@@ -70,6 +99,12 @@ class AgentOrchestrator:
 
         # 2. Hard Safety Pre-Checks (Bypass LLM immediately if triggered)
         is_safety_trigger, safety_reason = UnderstandingService.check_hard_safety_triggers(message)
+        if UnderstandingService.is_human_support_request(message):
+            is_safety_trigger = True
+            safety_reason = "Customer explicitly requested a human support agent"
+        elif UnderstandingService.is_handoff_confirmation(message, history):
+            is_safety_trigger = True
+            safety_reason = "Customer accepted the offer to connect with human support"
         if is_safety_trigger:
             esc_res = self.dispatcher.execute_tool(
                 "escalate_to_human",
@@ -81,11 +116,22 @@ class AgentOrchestrator:
                 },
             )
             lang, dialect = UnderstandingService.detect_language_and_dialect(message)
-            # Use brand-specific escalation message
-            reply = brand_config.get("escalation_messages", {}).get(
-                "ar_eg" if lang == Language.AR else "en",
-                "Connecting you with our support team right now.",
-            )
+            self.session_manager.add_turn(session_id, brand_id, "customer", message)
+            generator = f"llm:{self.live_llm.label}"
+            try:
+                reply = self._llm_reply(
+                    "escalation.j2",
+                    {
+                        "brand": brand_config,
+                        "escalation_reason": safety_reason,
+                        "customer_message": message,
+                        "escalation_succeeded": esc_res.success,
+                        "escalation_status": (esc_res.data or {}).get("status", "") if esc_res.success and isinstance(esc_res.data, dict) else "",
+                    },
+                )
+            except GeminiGenerationError as exc:
+                exc.escalation_succeeded = esc_res.success
+                raise
 
             latency = round((time.time() - start_time) * 1000, 2)
             transparency = TransparencyData(
@@ -95,13 +141,14 @@ class AgentOrchestrator:
                 dialect=dialect,
                 retrieved_sources=[],
                 tools_executed=[esc_res],
-                is_escalated=True,
+                is_escalated=esc_res.success,
                 escalation_reason=safety_reason,
+                memory_context_messages=0,
                 latency_ms=latency,
+                generator=generator,
             )
 
-            # Record turn in session memory
-            self.session_manager.add_turn(session_id, brand_id, "customer", message)
+            # Record only Gemini's generated response; the customer turn was added above.
             self.session_manager.add_turn(session_id, brand_id, "assistant", reply)
             self._log_audit_trace(session_id, brand_id, message, reply, transparency)
 
@@ -110,6 +157,50 @@ class AgentOrchestrator:
                 brand_id=brand_id,
                 session_id=session_id,
                 action_type=ActionType.ESCALATE,
+                transparency=transparency,
+            )
+
+        # 2b. Greeting / thanks / goodbye only: no retrieval, no tools, just a natural reply in the brand voice
+        if is_small_talk(message):
+            lang, dialect = UnderstandingService.detect_language_and_dialect(message)
+            response_language = (
+                "English" if lang == Language.EN else
+                "Egyptian Arabic" if dialect == Dialect.EGYPTIAN else
+                "Franco-Arabic" if dialect == Dialect.FRANCO else
+                "Arabic"
+            )
+            reply = self._llm_reply(
+                "smalltalk.j2",
+                {
+                    "brand": brand_config,
+                    "customer_message": message,
+                    "response_language": response_language,
+                    "history": list(history)[-8:],
+                    "is_first_turn": is_first_turn,
+                    "max_sentences": 2,
+                },
+            )
+            transparency = TransparencyData(
+                detected_intent=Intent.SMALL_TALK,
+                confidence=1.0,
+                language=lang,
+                dialect=dialect,
+                retrieved_sources=[],
+                tools_executed=[],
+                policy_decision=None,
+                is_escalated=False,
+                memory_context_messages=len(list(history)[-8:]),
+                latency_ms=round((time.time() - start_time) * 1000, 2),
+                generator=f"llm:{self.live_llm.label}",
+            )
+            self.session_manager.add_turn(session_id, brand_id, "customer", message)
+            self.session_manager.add_turn(session_id, brand_id, "assistant", reply)
+            self._log_audit_trace(session_id, brand_id, message, reply, transparency)
+            return TurnResponse(
+                reply=reply,
+                brand_id=brand_id,
+                session_id=session_id,
+                action_type=ActionType.ANSWER,
                 transparency=transparency,
             )
 
@@ -144,6 +235,15 @@ class AgentOrchestrator:
                     f"Order {d['order_id']}: {d['product_name']}, Status: {d['status']}, "
                     f"Delivery: {d['delivery_status']} (Amount: {d['total_amount']} {d['currency']})"
                 )
+            else:
+                # A failed lookup is still verified tool output. Pass the exact ID
+                # and not-found result to Gemini so it can explain the outcome in
+                # the customer's language instead of treating the ID as a FAQ.
+                tool_results_text = (
+                    f"Order lookup completed. No order was found with the exact ID "
+                    f"{resolved_entities.order_id} for brand {brand_id}. Do not infer or "
+                    "substitute another order number. Ask the customer to verify the ID."
+                )
 
         # Tool Route B: Return / Exchange Policy Check
         elif understanding.intent in [Intent.RETURNS, Intent.EXCHANGE, Intent.COMPLAINT, Intent.REFUND]:
@@ -153,7 +253,7 @@ class AgentOrchestrator:
                 cond = resolved_entities.condition or ("unworn, tags attached" if is_def else None)
                 facts = {
                     "request_type": "exchange" if understanding.intent == Intent.EXCHANGE else "return",
-                    "order_id": resolved_entities.order_id or "RLVNT-1001",
+                    "order_id": resolved_entities.order_id,
                     "product_id": resolved_entities.product_id,
                     "purchase_date": resolved_entities.purchase_date,
                     "condition": cond,
@@ -182,24 +282,25 @@ class AgentOrchestrator:
 
         # 7. Check for Uncovered Queries (Refusal Rule)
         action_type = ActionType.ANSWER
+        generator = f"llm:{self.live_llm.label}"
         if not retrieval_res.is_covered and not tools_executed and understanding.intent == Intent.PRODUCT_INFO:
-            # Out of domain / uncovered question -> Refusal
+            # Uncovered questions still require a Gemini-generated refusal.
             action_type = ActionType.REFUSE
-            reply = brand_config.get("refusal_messages", {}).get(
-                "ar_eg" if understanding.language == Language.AR else "en",
-                "I don't have verified information on that question. Let me connect you with our team.",
-            )
+            reply = self._llm_reply("refusal.j2", {"brand": brand_config, "customer_message": message})
         else:
-            # 8. Generate Customer Reply
-            reply = self.mock_llm.generate_response(
-                intent=understanding.intent,
-                language=understanding.language,
-                dialect=understanding.dialect,
-                context_text=context_text,
-                tool_results=tool_results_text,
-                decision=policy_decision.model_dump() if policy_decision else None,
-                customer_message=message,
-                is_first_turn=is_first_turn,
+            # Gemini narrates only verified retrieved facts and tool observations.
+            reply = self._llm_reply(
+                "grounded_generation.j2",
+                {
+                    "brand": brand_config,
+                    "context_text": context_text,
+                    "tool_results": tool_results_text,
+                    "decision": policy_decision.model_dump(mode="json") if policy_decision else None,
+                    "history": list(history)[-8:],
+                    "customer_message": message,
+                    "is_first_turn": is_first_turn,
+                    "max_sentences": 3,
+                },
             )
 
         latency = round((time.time() - start_time) * 1000, 2)
@@ -213,7 +314,9 @@ class AgentOrchestrator:
             tools_executed=tools_executed,
             policy_decision=policy_decision,
             is_escalated=False,
+            memory_context_messages=len(list(history)[-8:]),
             latency_ms=latency,
+            generator=generator,
         )
 
         # 9. Update Session Memory & Write Audit Trace

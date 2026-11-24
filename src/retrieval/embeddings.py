@@ -8,7 +8,7 @@ import numpy as np
 
 
 class EmbeddingService:
-    """Provides vector embeddings using SentenceTransformers with an offline fallback."""
+    """Provides vector embeddings; deterministic fallback is for retrieval continuity, never reply generation."""
 
     def __init__(self, model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"):
         self.model_name = model_name
@@ -25,7 +25,7 @@ class EmbeddingService:
                 else:
                     self._dimension = self._model.get_sentence_embedding_dimension()
             except Exception as e:
-                # If network or model loading fails, log warning and use deterministic deterministic fallback
+                # Embedding fallback only; customer-facing language is still Gemini-generated.
                 print(f"Warning: Failed to load '{self.model_name}': {e}. Using deterministic fallback.")
                 self._model = "FALLBACK"
 

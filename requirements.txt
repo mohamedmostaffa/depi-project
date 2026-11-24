@@ -7,9 +7,6 @@ uvicorn[standard]>=0.28.0
 pydantic>=2.6.0
 pydantic-settings>=2.2.0
 
-# User Interface
-streamlit>=1.32.0
-
 # Generative AI & LLM SDK
 google-genai>=0.1.0
 

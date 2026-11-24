@@ -63,7 +63,12 @@ class SessionState:
                     extracted.product_id = self.tracked_entities["product_id"]
 
         if not extracted.order_id and self.tracked_entities["order_id"]:
-            if "order" in tokens or "أوردر" in text_lower or "طلب" in text_lower:
+            order_reference_terms = (
+                "order", "أوردر", "اوردر", "طلب", "return", "exchange", "swap", "refund",
+                "ارجاع", "إرجاع", "ارجع", "أرجع", "ترجيع", "استرجاع", "تبديل",
+                "استبدال", "أبدل", "ابدل", "أبدله", "ارجعه",
+            )
+            if any(term in text_lower for term in order_reference_terms):
                 extracted.order_id = self.tracked_entities["order_id"]
 
         return extracted
@@ -88,6 +93,15 @@ class SessionManager:
     def add_turn(self, session_id: str, brand_id: str, role: str, content: str):
         session = self.get_or_create_session(session_id, brand_id)
         session.add_turn(role, content)
+
+    def remember_order_id(self, session_id: str, brand_id: str, order_id: str):
+        """Attach a conversation's supplied order reference to its session context.
+
+        The order tool still verifies the exact ID before any order facts are used.
+        """
+        if order_id:
+            session = self.get_or_create_session(session_id, brand_id)
+            session.tracked_entities["order_id"] = order_id.strip().upper()
 
     def get_history(self, session_id: str, brand_id: str) -> List[ConversationTurn]:
         session = self.get_or_create_session(session_id, brand_id)

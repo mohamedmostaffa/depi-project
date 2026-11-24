@@ -16,7 +16,7 @@ This skill governs the sequential orchestration pipeline that processes each cus
 ## Technical Instructions
 1. **Pipeline Execution Flow (`handle_turn`):**
    - **Step 1:** Load brand configuration (`config/<brand>.yaml`) and session memory (`N` turns).
-   - **Step 2 (Hard Pre-Checks):** Scan user message against regex/keyword lists for immediate escalation (explicit human request, safety complaint, legal dispute). If matched, bypass LLM and escalate.
+   - **Step 2 (Hard Pre-Checks):** Scan user message against regex/keyword lists for immediate escalation (explicit human request, safety complaint, legal dispute). If matched, bypass NLU and normal tools, execute the escalation tool, then still use Gemini to generate the customer-facing status message. Never fall back to a canned message.
    - **Step 3 (Understanding):** Execute a single structured LLM call to extract intent, language, dialect, entities, and sentiment.
    - **Step 4 (Normalization & Coreference):** Convert Arabic digits, resolve relative dates via Python, and map coreferences ("the black one" $\rightarrow$ previous product).
    - **Step 5 (Retrieval):** Query vector store for prose policy (`retrieve`) and structured catalog/order services for exact facts.

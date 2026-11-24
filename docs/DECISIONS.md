@@ -95,14 +95,14 @@ This document records key technical and architectural decisions, alternatives ev
 
 ---
 
-## ADR-008: Real-Time Streamlit Inspector Side Panel with In-Process Resilient Fallback
+## ADR-008: Retired Streamlit Inspector Prototype (superseded)
 - **Date:** November 21, 2026
 - **Status:** ACCEPTED
 - **Context:** During a live panel defense or demo, microservice processes can crash, experience port collisions, or drop network connectivity. Furthermore, evaluators demand to see the inner reasoning of the system in real time.
 - **Alternatives Considered:**
   1. Build a black-box chat UI communicating exclusively over HTTP with no fallback.
   2. Build a CLI terminal text inspector.
-  3. Build a dual-pane Streamlit interface (`app/streamlit_app.py`) featuring an authentic consumer streetwear chat window on the right and a real-time Technical Inspector panel on the left, backed by an auto-switching pipeline (HTTP $\to$ In-Process fallback).
+  3. The historical prototype used Streamlit; it has been removed. The active customer portal, admin dashboard, and Technical Inspector are in the React application under `web/`.
 - **Decision:** Option 3.
 - **Defense for DEPI:** Eliminates live demo failure risk. Evaluators can watch intent classification, retrieved chunks with cosine similarities, tool outputs, and deterministic rule traces update synchronously after every turn.
 
@@ -131,3 +131,13 @@ This document records key technical and architectural decisions, alternatives ev
   3. Word-boundary token segmentation (`set(re.findall(r'\b\w+\b', norm_text))`) with positive phrase priority.
 - **Decision:** Option 3. Tokenize words into a hash set and verify negative tokens only when positive assertions (`unworn`, `مش ملبوس`) are absent.
 - **Defense for DEPI:** Eliminates false-positive rejection of eligible customer garments, ensuring 100% deterministic policy engine compliance across both English and Arabic condition expressions.
+
+---
+
+## ADR-011: Shared Persistent Conversation Inbox
+- **Date:** November 21, 2026
+- **Status:** ACCEPTED
+- **Context:** This describes an earlier prototype. Shared conversation history and human takeover are now implemented through the React interfaces and FastAPI backend.
+- **Decision:** Add a SQLite-backed conversation/message store, typed REST endpoints for customer and admin actions, bearer-token protection for admin routes, and a React customer portal and support inbox. Serialize AI, takeover, and staff replies per conversation in the single-process local deployment. Keep the existing `AgentOrchestrator` and tool/policy pipeline as the AI execution path.
+- **Trade-offs:** SQLite and per-process locks are suitable for the current local prototype, but multiple API workers or production replicas require a shared database and cross-process coordination. Support uses one shared email/password account that exchanges for a protected bearer token; production must configure a strong password, a private `BRANDMIND_ADMIN_TOKEN`, and durable infrastructure.
+- **Defense for DEPI:** The customer and support agent now work against one message history. Human takeover changes the conversation state before staff replies are accepted, and AI turns check that state under the same conversation lock.
